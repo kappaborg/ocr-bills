@@ -34,8 +34,9 @@ out/
 # Claude local config
 .claude/
 
-# Receipt image dataset (large, not part of source code)
+# Receipt image dataset and archives (large, not part of source code)
 receipts/
+*.zip
 
 # Misc
 *.log

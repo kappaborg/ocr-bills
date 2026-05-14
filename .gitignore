@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+env/
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Database & uploaded files
+backend/storage/
+
+# Node
+node_modules/
+.next/
+.nuxt/
+out/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Claude local config
+.claude/
+
+# Receipt image dataset (large, not part of source code)
+receipts/
+
+# Misc
+*.log
+*.sqlite
+*.db
+MVP_File
+PHOTO-*.jpg
+todo.md

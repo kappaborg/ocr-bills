@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Explicit dark app theme — avoids OS dark mode + white cards = invisible text */
+:root {
+  color-scheme: dark;
+  --app-bg: #030712;
+  --surface: rgba(15, 23, 42, 0.75);
+  --surface-border: rgba(255, 255, 255, 0.08);
+  --accent: #22d3ee;
+  --accent-dim: rgba(34, 211, 238, 0.15);
+}
+
+body {
+  margin: 0;
+}
+
+@layer utilities {
+  .bg-app {
+    background-color: var(--app-bg);
+    background-image: radial-gradient(
+        ellipse 80% 55% at 50% -15%,
+        rgba(34, 211, 238, 0.12),
+        transparent 55%
+      ),
+      linear-gradient(180deg, #030712 0%, #0f172a 100%);
+  }
+
+  .bg-grid {
+    background-size: 48px 48px;
+    background-image: linear-gradient(
+        to right,
+        rgba(255, 255, 255, 0.03) 1px,
+        transparent 1px
+      ),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  }
+
+  .glass-panel {
+    @apply rounded-2xl border border-white/10 bg-slate-900/60 shadow-2xl shadow-cyan-500/5 backdrop-blur-xl;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 40px rgba(34, 211, 238, 0.25);
+  }
+}

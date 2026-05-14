@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user, get_db
 from app.db.init_db import init_db
-from app.api.deps import get_db
 from app.db.models import User
+from app.services.rate_limit import live_ocr_limiter
 from app.utils.auth import create_access_token, hash_password, verify_password
 
 
 router = APIRouter()
+
+MIN_PASSWORD_LEN = 8
 
 
 class RegisterRequest(BaseModel):
@@ -26,9 +29,24 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class ProfileUpdateRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     init_db(db)
+
+    ip = request.client.host if request.client else "unknown"
+    if not live_ocr_limiter.allow(f"register:{ip}", capacity=5, refill_per_sec=5 / 60.0):
+        raise HTTPException(status_code=429, detail="Too many registration attempts. Please wait a minute.")
+
+    if len(payload.password) < MIN_PASSWORD_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {MIN_PASSWORD_LEN} characters.",
+        )
 
     existing = db.query(User).filter(User.email == payload.email.lower().strip()).first()
     if existing:
@@ -47,8 +65,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     init_db(db)
+
+    ip = request.client.host if request.client else "unknown"
+    if not live_ocr_limiter.allow(f"login:{ip}", capacity=10, refill_per_sec=10 / 60.0):
+        raise HTTPException(status_code=429, detail="Too many login attempts. Please wait 60 seconds before trying again.")
 
     user = db.query(User).filter(User.email == payload.email.lower().strip()).first()
     if not user:
@@ -59,3 +81,31 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     token = create_access_token(user_id=user.id)
     return TokenResponse(access_token=token)
 
+
+@router.patch("/profile")
+def update_profile(
+    payload: ProfileUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    if len(payload.new_password) < MIN_PASSWORD_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"New password must be at least {MIN_PASSWORD_LEN} characters.",
+        )
+
+    user.password_hash = hash_password(payload.new_password)
+    db.add(user)
+    db.commit()
+    return {"detail": "Password updated successfully"}
+
+
+@router.get("/me")
+def get_me(
+    user: User = Depends(get_current_user),
+):
+    return {"id": user.id, "email": user.email}

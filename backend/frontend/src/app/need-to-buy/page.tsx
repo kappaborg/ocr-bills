@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
@@ -56,9 +57,8 @@ export default function NeedToBuyPage() {
         Smart shopping list
       </h1>
       <p className="mt-2 text-sm text-slate-400">
-        Baseline AI: predicts what’s due soon based on your purchase intervals.
+        Predicts what&apos;s due soon based on your purchase intervals.
       </p>
-
 
       {error ? (
         <div
@@ -71,17 +71,35 @@ export default function NeedToBuyPage() {
 
       <div className="mt-8 space-y-6">
         {loading ? (
-          <div className="glass-panel p-6 text-sm text-slate-400">Loading…</div>
+          <div className="glass-panel flex items-center justify-center gap-3 p-10">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-400" />
+            <p className="text-sm text-slate-400">Loading…</p>
+          </div>
         ) : items.length === 0 ? (
-          <div className="glass-panel p-6 text-sm text-slate-400">
-            Nothing is due yet. Confirm more receipts to improve predictions.
+          <div className="glass-panel flex flex-col items-center gap-4 px-8 py-14 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800/60 text-2xl">
+              🛒
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100">Nothing to buy yet</h2>
+              <p className="mt-2 max-w-sm text-sm text-slate-400">
+                As you confirm receipts, we&apos;ll track what you buy regularly and remind you
+                when you&apos;re likely running low.
+              </p>
+            </div>
+            <Link
+              href="/upload"
+              className="mt-2 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 hover:brightness-110"
+            >
+              Upload a receipt
+            </Link>
           </div>
         ) : (
           grouped.map(([cat, arr]) => (
             <section key={cat} className="glass-panel p-6">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-slate-100">{cat}</h2>
-                <p className="text-xs text-slate-500">{arr.length} items</p>
+                <p className="text-xs text-slate-500">{arr.length} item{arr.length === 1 ? "" : "s"}</p>
               </div>
 
               <div className="mt-4 space-y-2">
@@ -114,4 +132,3 @@ export default function NeedToBuyPage() {
     </main>
   );
 }
-

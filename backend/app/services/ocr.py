@@ -134,7 +134,10 @@ def extract_text_from_image(file_path: str) -> str:
         raise RuntimeError("Uploaded file not found on disk.")
 
     try:
-        img = Image.open(file_path)
+        # Load and immediately release the file handle to avoid descriptor leaks under load
+        with Image.open(file_path) as _f:
+            _f.load()
+            img = _f.copy()
 
         # Fix phone camera orientation before anything else
         img = _apply_exif_rotation(img)

@@ -44,11 +44,11 @@ async function apiFetch<T>(
   });
 
   if (!res.ok) {
-    // Expired or invalid token — clear it and send user to login immediately.
     if (res.status === 401) {
       clearAccessToken();
+      // Dispatch event so active pages can warn about unsaved changes before redirecting
       if (typeof window !== "undefined") {
-        window.location.href = "/login";
+        window.dispatchEvent(new CustomEvent("auth:expired"));
       }
       throw new Error("Session expired. Please sign in again.");
     }
@@ -108,8 +108,41 @@ export async function confirmReceipt(
   });
 }
 
+export async function deleteReceipt(receiptId: number, token: string): Promise<void> {
+  const url = `${API_BASE_URL}/receipts/${receiptId}`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 204) {
+    let payload: unknown = null;
+    try { payload = await res.json(); } catch { /* ignore */ }
+    throw new Error(getErrorMessage(payload));
+  }
+}
+
+export async function getReceiptImageBlob(receiptId: number, token: string): Promise<string> {
+  const url = `${API_BASE_URL}/receipts/${receiptId}/image`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error("Image not available");
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export async function listTransactions(token: string): Promise<{ results: TransactionOut[] }> {
   return apiFetch<{ results: TransactionOut[] }>("/transactions", { token });
+}
+
+export async function exportTransactionsCsv(token: string): Promise<void> {
+  const url = `${API_BASE_URL}/transactions/export.csv`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error("Export failed");
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "transactions.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 export async function listInsights(token: string): Promise<{ results: InsightOut[] }> {
@@ -165,3 +198,18 @@ export async function createReceiptFromFrame(
   );
 }
 
+export async function updateProfile(
+  currentPassword: string,
+  newPassword: string,
+  token: string,
+): Promise<{ detail: string }> {
+  return apiFetch<{ detail: string }>("/auth/profile", {
+    method: "PATCH",
+    token,
+    jsonBody: { current_password: currentPassword, new_password: newPassword },
+  });
+}
+
+export async function getMe(token: string): Promise<{ id: number; email: string }> {
+  return apiFetch<{ id: number; email: string }>("/auth/me", { token });
+}

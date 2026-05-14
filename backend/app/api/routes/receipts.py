@@ -2,8 +2,9 @@ import os
 import re
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
@@ -25,9 +26,8 @@ from app.services.rate_limit import live_ocr_limiter
 router = APIRouter()
 
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png"}
-MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8MB per file (phone-friendly)
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB per file
 
-# Keywords that must never appear as item names (totals, tax lines, fiscal IDs).
 _JUNK_KEYWORDS = {
     "UKUPNO", "UPLACENO", "UPLATENO", "GOTOVINA", "POVRAT",
     "TOTAL", "TOIAL", "CHANGE", "CASH", "CARD", "AMOUNT",
@@ -37,7 +37,6 @@ _JUNK_KEYWORDS = {
 
 
 def _is_junk_item(item_name: str, item_price: float) -> bool:
-    """Return True for OCR artifacts that should never be saved as receipt items."""
     name = (item_name or "").strip()
     name_upper = name.upper()
 
@@ -47,19 +46,29 @@ def _is_junk_item(item_name: str, item_price: float) -> bool:
         return True
     if any(kw in name_upper for kw in _JUNK_KEYWORDS):
         return True
-    # Fiscal ID pattern: "JIB: A2B0S04"
     if re.search(r"\b(JIB|PIB|IBF|PDV|VAT)\s*[:=]", name, flags=re.IGNORECASE):
         return True
-    # Looks like a date (e.g. "18.03.2026,")
     from app.services.receipt_parser import detect_receipt_date
     if detect_receipt_date(name) is not None:
         return True
-
     return False
 
 
 def _storage_path(storage_key: str) -> str:
     return os.path.join(settings.UPLOAD_DIR, storage_key)
+
+
+def _load_receipt(receipt_id: int, user_id: int, db: Session) -> Receipt:
+    """Load a receipt with items+categories eagerly to avoid N+1 queries."""
+    receipt = (
+        db.query(Receipt)
+        .options(selectinload(Receipt.items).selectinload(ReceiptItem.category))
+        .filter(Receipt.id == receipt_id, Receipt.user_id == user_id)
+        .first()
+    )
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    return receipt
 
 
 def _get_receipt_out(receipt: Receipt) -> ReceiptOut:
@@ -93,17 +102,12 @@ def _get_receipt_out(receipt: Receipt) -> ReceiptOut:
 
 
 def _build_preview_out(raw_text: str, db: Session) -> ReceiptOut:
-    """
-    Build a transient ReceiptOut for live preview without persisting a Receipt row.
-    """
     lang = detect_language(raw_text)
     parsed = parse_receipt(raw_text)
 
-    # Map global categories by name for categorization.
     categories = db.query(Category).filter(Category.user_id.is_(None)).all()
     categories_by_name = {c.name: c.id for c in categories}
 
-    # Reuse the same categorization logic as the async pipeline where possible.
     from app.services.categorization import categorize_item
 
     items_out: list[dict] = []
@@ -160,7 +164,6 @@ def upload_receipts(
             raise HTTPException(status_code=413, detail="File too large")
         ext = os.path.splitext(uf.filename or "")[1].lower()
         if ext not in ALLOWED_EXTS:
-            # MVP limitation: OCR adapter currently supports raster images only.
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported file type: {ext}. Supported: jpg, jpeg, png.",
@@ -185,8 +188,8 @@ def upload_receipts(
             content = uf.file.read()
             f.write(content)
 
-        if background_tasks is not None:
-            background_tasks.add_task(process_receipt, receipt.id)
+        # FastAPI always injects BackgroundTasks — no null guard needed
+        background_tasks.add_task(process_receipt, receipt.id)
 
         results.append({"receipt_id": receipt.id, "processing_status": receipt.processing_status})
 
@@ -200,20 +203,13 @@ def live_preview_receipt(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """
-    Lightweight, synchronous OCR endpoint for live phone scanning.
-
-    Does NOT persist a Receipt row — returns a transient preview so the
-    client can overlay parsed content while the user is scanning.
-    """
     init_db(db)
 
-    # Basic rate limiting (single-process). Keeps the server safe when scanning live.
     ip = request.client.host if request.client else "unknown"
     if not live_ocr_limiter.allow(
         f"live-preview:{user.id}:{ip}",
         capacity=12,
-        refill_per_sec=12 / 10.0,  # ~12 requests per 10 seconds
+        refill_per_sec=12 / 10.0,
     ):
         raise HTTPException(status_code=429, detail="Too many requests")
 
@@ -227,7 +223,6 @@ def live_preview_receipt(
             detail=f"Unsupported file type: {ext}. Supported: jpg, jpeg, png.",
         )
 
-    # Store into a short‑lived temp location under the existing upload dir.
     preview_code = uuid.uuid4().hex
     storage_key = f"{user.id}/_preview/{preview_code}{ext}"
     target_path = _storage_path(storage_key)
@@ -245,7 +240,6 @@ def live_preview_receipt(
             detail=f"OCR could not read text from this image. Try better lighting or hold the camera steadier. ({exc})",
         )
     finally:
-        # Clean up the temp preview file regardless of OCR outcome.
         try:
             os.remove(target_path)
         except OSError:
@@ -267,9 +261,6 @@ def create_receipt_from_frame(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """
-    Persist a single camera frame as a Receipt and enqueue normal processing.
-    """
     init_db(db)
 
     if file.size is not None and file.size > MAX_UPLOAD_BYTES:
@@ -300,8 +291,7 @@ def create_receipt_from_frame(
     with open(target_path, "wb") as f:
         f.write(file.file.read())
 
-    if background_tasks is not None:
-        background_tasks.add_task(process_receipt, receipt.id)
+    background_tasks.add_task(process_receipt, receipt.id)
 
     return {"receipt_id": receipt.id, "processing_status": receipt.processing_status}
 
@@ -311,7 +301,6 @@ def list_receipts(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    # MVP: return minimal list.
     init_db(db)
     receipts = db.query(Receipt).filter(Receipt.user_id == user.id).order_by(Receipt.id.desc()).limit(50).all()
     return [
@@ -320,13 +309,60 @@ def list_receipts(
     ]
 
 
-@router.get("/{receipt_id}", response_model=ReceiptOut)
-def get_receipt(receipt_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+@router.get("/{receipt_id}/image")
+def get_receipt_image(
+    receipt_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
     init_db(db)
     receipt = db.query(Receipt).filter(Receipt.id == receipt_id, Receipt.user_id == user.id).first()
     if not receipt:
         raise HTTPException(status_code=404, detail="Receipt not found")
+
+    file_path = _storage_path(receipt.storage_key)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+
+    ext = os.path.splitext(file_path)[1].lower()
+    media_type = "image/png" if ext == ".png" else "image/jpeg"
+
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
+@router.get("/{receipt_id}", response_model=ReceiptOut)
+def get_receipt(receipt_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    init_db(db)
+    receipt = _load_receipt(receipt_id, user.id, db)
     return _get_receipt_out(receipt)
+
+
+@router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_receipt(
+    receipt_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    init_db(db)
+    receipt = db.query(Receipt).filter(Receipt.id == receipt_id, Receipt.user_id == user.id).first()
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    # Remove stored file
+    file_path = _storage_path(receipt.storage_key)
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except OSError:
+        pass
+
+    db.delete(receipt)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch("/{receipt_id}/confirm", response_model=ReceiptOut)
@@ -337,16 +373,12 @@ def confirm_receipt(
     user=Depends(get_current_user),
 ):
     init_db(db)
-    receipt = db.query(Receipt).filter(Receipt.id == receipt_id, Receipt.user_id == user.id).first()
-    if not receipt:
-        raise HTTPException(status_code=404, detail="Receipt not found")
+    receipt = _load_receipt(receipt_id, user.id, db)
 
-    # Ensure categories exist.
     categories = db.query(Category).filter(Category.user_id.is_(None)).all()
     categories_by_name = {c.name: c for c in categories}
     uncategorized = categories_by_name.get("Uncategorized")
 
-    # Replace items with payload.
     receipt.items.clear()
     db.flush()
 
@@ -370,93 +402,8 @@ def confirm_receipt(
     db.commit()
     db.refresh(receipt)
 
-    # Update per-user product stats for inventory and recommendations.
-    from datetime import datetime, timezone
+    from app.services.inventory_update import update_inventory_for_receipt
+    update_inventory_for_receipt(receipt, db)
 
-    from app.db.models import InventoryItem, Product
-    from app.services.product_normalization import normalize_product_name
-
-    purchased_at = receipt.receipt_date or datetime.now(timezone.utc).replace(tzinfo=None)
-
-    for it in receipt.items:
-        norm = normalize_product_name(it.item_name)
-        if not norm:
-            continue
-
-        product = (
-            db.query(Product)
-            .filter(Product.user_id == user.id, Product.name_normalized == norm)
-            .first()
-        )
-        if product is None:
-            # Fuzzy match for near-duplicates (receipt OCR variance).
-            try:
-                from difflib import SequenceMatcher
-
-                # Only consider recent/common products to keep this fast.
-                candidates = (
-                    db.query(Product)
-                    .filter(Product.user_id == user.id)
-                    .order_by(Product.id.desc())
-                    .limit(400)
-                    .all()
-                )
-                best = None
-                best_ratio = 0.0
-                for c in candidates:
-                    r = SequenceMatcher(None, norm, c.name_normalized).ratio()
-                    if r > best_ratio:
-                        best_ratio = r
-                        best = c
-                if best is not None and best_ratio >= 0.90:
-                    product = best
-            except Exception:
-                pass
-        if product is None:
-            product = Product(
-                user_id=user.id,
-                name=it.item_name[:255],
-                name_normalized=norm[:255],
-                category_id=it.category_id,
-            )
-            db.add(product)
-            db.flush()
-        elif product.category_id is None and it.category_id is not None:
-            product.category_id = it.category_id
-
-        inv = db.query(InventoryItem).filter(InventoryItem.product_id == product.id).first()
-        if inv is None:
-            inv = InventoryItem(
-                user_id=user.id,
-                product_id=product.id,
-                last_purchased_at=purchased_at,
-                purchase_count=1,
-                avg_interval_days=None,
-            )
-            db.add(inv)
-        else:
-            # Update running avg interval in days.
-            prev_last = inv.last_purchased_at
-            prev_count = inv.purchase_count or 0
-            if prev_last is not None and purchased_at > prev_last:
-                interval_days = (purchased_at - prev_last).total_seconds() / 86400.0
-                if interval_days > 0.01:
-                    if inv.avg_interval_days is None:
-                        inv.avg_interval_days = interval_days
-                    else:
-                        # avg over (prev_count-1) intervals, adding one new interval
-                        prev_intervals = max(prev_count - 1, 1)
-                        inv.avg_interval_days = (
-                            inv.avg_interval_days * prev_intervals + interval_days
-                        ) / (prev_intervals + 1)
-
-            inv.last_purchased_at = purchased_at
-            inv.purchase_count = prev_count + 1
-            inv.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
-
-        db.add(product)
-        db.add(inv)
-
-    db.commit()
+    db.refresh(receipt)
     return _get_receipt_out(receipt)
-

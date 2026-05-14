@@ -9,6 +9,7 @@ export default function UploadPage() {
   const router = useRouter();
   const token = getAccessToken();
   const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -16,12 +17,23 @@ export default function UploadPage() {
     if (!token) router.replace("/login");
   }, [token, router]);
 
+  // Build and revoke object URLs when files change
+  useEffect(() => {
+    const urls = files.map((f) => URL.createObjectURL(f));
+    setPreviews(urls);
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, [files]);
+
   const canUpload = useMemo(() => Boolean(token) && files.length > 0, [token, files.length]);
 
   const onFilesChange = (list: FileList | null) => {
-    if (!list) return setFiles([]);
+    if (!list) { setFiles([]); return; }
     setFiles(Array.from(list));
     setError(null);
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const onUpload = async () => {
@@ -77,12 +89,30 @@ export default function UploadPage() {
           </p>
         </label>
 
-        {files.length > 0 ? (
-          <p className="text-sm text-slate-400">
-            <span className="font-mono text-cyan-300">{files.length}</span> file
-            {files.length === 1 ? "" : "s"} selected
-          </p>
-        ) : null}
+        {/* File previews */}
+        {files.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {files.map((file, i) => (
+              <div key={i} className="group relative overflow-hidden rounded-xl border border-white/10 bg-slate-900/60">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previews[i]}
+                  alt={file.name}
+                  className="h-28 w-full object-cover"
+                />
+                <p className="truncate px-2 py-1.5 text-[11px] text-slate-400">{file.name}</p>
+                <button
+                  type="button"
+                  onClick={() => removeFile(i)}
+                  className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-950/80 text-slate-400 opacity-0 transition group-hover:opacity-100 hover:text-red-300"
+                  aria-label="Remove file"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <button
           type="button"

@@ -26,7 +26,12 @@ export default function LoginPage() {
       setAccessToken(res.access_token);
       router.replace("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const msg = err instanceof Error ? err.message : "Login failed";
+      if (msg.toLowerCase().includes("too many")) {
+        setError("Too many login attempts. Please wait 60 seconds before trying again.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -69,7 +74,9 @@ export default function LoginPage() {
           </label>
 
           {error ? (
-            <p className="text-sm text-red-300">{error}</p>
+            <p className="rounded-lg bg-red-950/40 px-3 py-2 text-sm text-red-300 ring-1 ring-red-500/30">
+              {error}
+            </p>
           ) : null}
 
           <button

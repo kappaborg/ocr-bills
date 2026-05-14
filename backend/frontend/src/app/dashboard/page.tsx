@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { clearAccessToken, getAccessToken } from "@/lib/auth";
-import { listInsights, listTransactions } from "@/lib/api";
+import { deleteReceipt, exportTransactionsCsv, listInsights, listTransactions } from "@/lib/api";
 import { InsightOut, TransactionOut } from "@/lib/types";
 import { useRouter } from "next/navigation";
 
@@ -14,6 +14,9 @@ export default function DashboardPage() {
   const [insights, setInsights] = useState<InsightOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [exportLoading, setExportLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -43,6 +46,65 @@ export default function DashboardPage() {
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
   }, [transactions]);
 
+  const grandTotal = useMemo(
+    () => transactions.reduce((sum, t) => sum + t.item_price, 0),
+    [transactions]
+  );
+
+  const spendingSpike = useMemo(
+    () => insights.find((i) => i.type === "spending_spike") ?? null,
+    [insights]
+  );
+
+  const filteredTransactions = useMemo(() => {
+    if (!search.trim()) return transactions;
+    const q = search.trim().toLowerCase();
+    return transactions.filter(
+      (t) =>
+        t.item_name.toLowerCase().includes(q) ||
+        (t.store_name ?? "").toLowerCase().includes(q)
+    );
+  }, [transactions, search]);
+
+  const handleDeleteReceipt = async (receiptId: number) => {
+    if (!token) return;
+    if (!window.confirm("Delete this receipt and all its items? This cannot be undone.")) return;
+    setDeletingId(receiptId);
+    try {
+      await deleteReceipt(receiptId, token);
+      setTransactions((prev) => prev.filter((t) => t.receipt_id !== receiptId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!token) return;
+    setExportLoading(true);
+    try {
+      await exportTransactionsCsv(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  // Derive receipt list from transactions for delete buttons
+  const receiptIds = useMemo(() => {
+    const seen = new Set<number>();
+    const list: { receipt_id: number; store_name?: string | null }[] = [];
+    for (const t of transactions) {
+      if (!seen.has(t.receipt_id)) {
+        seen.add(t.receipt_id);
+        list.push({ receipt_id: t.receipt_id, store_name: t.store_name });
+      }
+    }
+    return list;
+  }, [transactions]);
+
   if (!token) return null;
 
   return (
@@ -59,13 +121,21 @@ export default function DashboardPage() {
             Confirmed receipts → transactions → insights
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => router.push("/upload")}
             className="rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-md shadow-cyan-500/25 hover:brightness-110"
           >
             New scan
+          </button>
+          <button
+            type="button"
+            disabled={exportLoading || transactions.length === 0}
+            onClick={handleExport}
+            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10 disabled:opacity-40"
+          >
+            {exportLoading ? "Exporting…" : "Export CSV"}
           </button>
           <button
             type="button"
@@ -96,6 +166,29 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="space-y-8">
+          {/* Total spend with trend */}
+          {grandTotal > 0 && (
+            <section className="glass-panel flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Total spend (all time)
+                </p>
+                <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-cyan-300">
+                  {grandTotal.toFixed(2)}
+                </p>
+              </div>
+              {spendingSpike ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/20 px-3 py-1 text-xs font-semibold text-red-300 ring-1 ring-red-500/30">
+                  ↑ {spendingSpike.message.match(/\+(\d+)%/)?.[1] ?? ""}% vs last week
+                </span>
+              ) : transactions.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
+                  ✓ On track
+                </span>
+              ) : null}
+            </section>
+          )}
+
           <section className="glass-panel p-5 sm:p-6">
             <h2 className="text-lg font-semibold text-slate-50">By category</h2>
             {totalsByCategory.length === 0 ? (
@@ -141,14 +234,45 @@ export default function DashboardPage() {
           </section>
 
           <section className="glass-panel p-5 sm:p-6">
-            <h2 className="text-lg font-semibold text-slate-50">Transactions</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-slate-50">Transactions</h2>
+              {transactions.length > 0 && (
+                <div className="relative">
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search items or stores…"
+                    className="rounded-xl border border-white/10 bg-slate-900/80 px-3 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 w-56"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {search.trim() && (
+              <p className="mt-2 text-xs text-slate-500">
+                {filteredTransactions.length} result{filteredTransactions.length === 1 ? "" : "s"} for &quot;{search}&quot;
+              </p>
+            )}
+
             {transactions.length === 0 ? (
               <p className="mt-4 text-sm text-slate-500">
                 Confirm a receipt to see line items here.
               </p>
+            ) : filteredTransactions.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-500">No items match your search.</p>
             ) : (
               <ul className="mt-4 space-y-2">
-                {transactions.slice(0, 100).map((t) => (
+                {filteredTransactions.slice(0, 100).map((t) => (
                   <li
                     key={`${t.receipt_id}-${t.id}`}
                     className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3"
@@ -170,6 +294,36 @@ export default function DashboardPage() {
               </ul>
             )}
           </section>
+
+          {/* Receipts list with delete */}
+          {receiptIds.length > 0 && (
+            <section className="glass-panel p-5 sm:p-6">
+              <h2 className="text-lg font-semibold text-slate-50">Receipts</h2>
+              <ul className="mt-4 space-y-2">
+                {receiptIds.map(({ receipt_id, store_name }) => (
+                  <li
+                    key={receipt_id}
+                    className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-100">
+                        {store_name ?? `Receipt #${receipt_id}`}
+                      </p>
+                      <p className="text-xs text-slate-500">#{receipt_id}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={deletingId === receipt_id}
+                      onClick={() => handleDeleteReceipt(receipt_id)}
+                      className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-red-900/40 hover:text-red-300 disabled:opacity-50 transition"
+                    >
+                      {deletingId === receipt_id ? "Deleting…" : "Delete"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
       )}
     </main>

@@ -33,19 +33,33 @@ export default function ScanPage() {
 
     let stream: MediaStream | null = null;
 
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
-      .then((s) => {
-        stream = s;
-        if (videoRef.current) {
-          videoRef.current.srcObject = s;
-          videoRef.current.play().catch(() => {});
-        }
-        setIsStreaming(true);
-      })
-      .catch(() => {
-        setFatalError("Camera access denied. Enable camera permissions and try again.");
-      });
+    const startCamera = () => {
+      navigator.mediaDevices
+        .getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+        .then((s) => {
+          stream = s;
+          if (videoRef.current) {
+            videoRef.current.srcObject = s;
+            videoRef.current.play().catch((err: Error) => {
+              setFatalError(`Camera failed to start: ${err.message}`);
+            });
+          }
+          setIsStreaming(true);
+          setFatalError(null);
+        })
+        .catch((err: Error) => {
+          const isPermission = err.name === "NotAllowedError" || err.name === "PermissionDeniedError";
+          if (isPermission) {
+            setFatalError(
+              "camera_denied"
+            );
+          } else {
+            setFatalError(`Camera error: ${err.message}. Try reloading the page.`);
+          }
+        });
+    };
+
+    startCamera();
 
     return () => {
       stream?.getTracks().forEach((t) => t.stop());
@@ -176,9 +190,32 @@ export default function ScanPage() {
       {fatalError && (
         <div
           role="alert"
-          className="mt-4 rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm text-red-200"
+          className="mt-4 rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-4 text-sm text-red-200"
         >
-          {fatalError}
+          {fatalError === "camera_denied" ? (
+            <div className="space-y-2">
+              <p className="font-medium">Camera access is required for scanning.</p>
+              <p className="text-xs text-red-300/80">
+                On iPhone: Settings → Safari → Camera → Allow.<br />
+                On Android: tap the camera icon in the address bar.<br />
+                Then reload this page.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setFatalError(null);
+                  setIsStreaming(false);
+                  // Re-trigger camera by re-running the effect via a state bump
+                  window.location.reload();
+                }}
+                className="mt-1 rounded-lg border border-red-400/40 px-3 py-1.5 text-xs font-medium text-red-200 hover:bg-red-900/40"
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            fatalError
+          )}
         </div>
       )}
 

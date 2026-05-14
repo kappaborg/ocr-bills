@@ -4,12 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/", label: "Home" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/upload", label: "Upload" },
   { href: "/scan", label: "Scan" },
   { href: "/inventory", label: "Inventory" },
   { href: "/need-to-buy", label: "Need to buy" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function TopNav() {
@@ -26,16 +26,18 @@ export function TopNav() {
             Flux<span className="text-cyan-400">Receipt</span>
           </span>
         </Link>
-        <nav className="flex items-center gap-1 sm:gap-2">
+        <nav className="flex items-center gap-1 overflow-x-auto sm:gap-2">
           {links.map((l) => {
-            const active = pathname === l.href;
+            const active =
+              pathname === l.href ||
+              (l.href !== "/" && pathname.startsWith(l.href + "/"));
             return (
               <Link
                 key={l.href}
                 href={l.href}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
                   active
-                    ? "bg-white/10 text-cyan-300"
+                    ? "bg-white/10 text-cyan-300 underline decoration-cyan-400/50 underline-offset-4"
                     : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
                 }`}
               >

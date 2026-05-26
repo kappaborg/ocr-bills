@@ -11,6 +11,17 @@ class Settings(BaseSettings):
 
     GOOGLE_VISION_API_KEY: str = ""
 
+    # ── OCR engine selection ───────────────────────────────────────────────
+    # One of: tesseract (default, free, local) | gemini (free tier 1500/day,
+    # highest accuracy) | claude (paid) | mindee (paid, receipt-specialised) |
+    # paddle (free, local — currently stubbed pending Py 3.14 wheels).
+    OCR_ENGINE: str = "tesseract"
+
+    # Gemini settings — set GEMINI_API_KEY in .env to activate the gemini engine.
+    # Key from https://aistudio.google.com/app/apikey (free tier).
+    GEMINI_API_KEY: str = ""
+    OCR_VLM_MODEL: str = "gemini-2.5-flash"
+
     # Tesseract language configuration.
     # Broad default covering Latin + Cyrillic (ex-YU + Russian) receipt scripts.
     # Override via TESSERACT_LANGS env var. All of these packs are available in the

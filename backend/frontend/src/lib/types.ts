@@ -19,6 +19,7 @@ export type ReceiptOut = {
   store_name?: string | null;
   total_amount?: number | null;
   currency?: string | null;
+  tax_amount?: number | null;
   items: ReceiptItem[];
 };
 
@@ -31,6 +32,8 @@ export type TransactionOut = {
   quantity?: number | null;
   unit_price?: number | null;
   item_price: number;
+  currency?: string | null;
+  category_id?: number | null;
   category_name?: string | null;
 };
 

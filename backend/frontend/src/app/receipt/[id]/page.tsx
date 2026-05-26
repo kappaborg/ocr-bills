@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
 import { confirmReceipt, getReceipt, getReceiptImageBlob, listCategories } from "@/lib/api";
 import type { ReceiptOut } from "@/lib/types";
-import { formatReceiptDate } from "@/lib/format";
+import { formatCurrency, formatReceiptDate } from "@/lib/format";
 
 type Category = { id: number; name: string };
 
@@ -363,10 +363,7 @@ export default function ReceiptReviewPage() {
                   Total
                 </dt>
                 <dd className="mt-1 font-mono text-lg font-semibold tabular-nums text-cyan-300">
-                  {receipt.total_amount != null ? receipt.total_amount.toFixed(2) : "—"}{" "}
-                  <span className="text-sm font-normal text-slate-400">
-                    {receipt.currency ?? ""}
-                  </span>
+                  {formatCurrency(receipt.total_amount, receipt.currency)}
                 </dd>
               </div>
             </dl>

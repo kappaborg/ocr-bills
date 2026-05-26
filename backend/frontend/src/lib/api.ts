@@ -96,6 +96,10 @@ export async function getReceipt(receiptId: number, token: string): Promise<Rece
   return apiFetch<ReceiptOut>(`/receipts/${receiptId}`, { token });
 }
 
+export async function listReceipts(token: string): Promise<ReceiptOut[]> {
+  return apiFetch<ReceiptOut[]>("/receipts", { token });
+}
+
 export async function confirmReceipt(
   receiptId: number,
   payload: { items: { item_name: string; item_price: number; category_id?: number | null; quantity?: number | null; unit_price?: number | null }[] },
@@ -212,4 +216,103 @@ export async function updateProfile(
 
 export async function getMe(token: string): Promise<{ id: number; email: string }> {
   return apiFetch<{ id: number; email: string }>("/auth/me", { token });
+}
+
+// ── New endpoints (live FX, budgets, search, recurring, PDF, households, tax) ──
+
+export type FxRatesResponse = {
+  base: string;
+  rates: Record<string, number>;
+  fetched_at: number;
+  source: string;
+};
+export async function getFxRates(): Promise<FxRatesResponse> {
+  return apiFetch<FxRatesResponse>("/fx/rates", {});
+}
+
+export type BudgetOut = {
+  id: number;
+  category_id: number | null;
+  category_name: string | null;
+  monthly_limit: number;
+  currency: string;
+  spent: number;
+  remaining: number;
+  percent: number;
+  projected_month_end: number;
+  over_budget: boolean;
+};
+export async function listBudgets(token: string): Promise<{ results: BudgetOut[] }> {
+  return apiFetch<{ results: BudgetOut[] }>("/budgets", { token });
+}
+export async function upsertBudget(
+  payload: { category_id: number | null; monthly_limit: number; currency: string },
+  token: string,
+): Promise<BudgetOut> {
+  return apiFetch<BudgetOut>("/budgets", { method: "POST", token, jsonBody: payload });
+}
+export async function deleteBudget(id: number, token: string): Promise<void> {
+  await apiFetch(`/budgets/${id}`, { method: "DELETE", token });
+}
+
+export type RecurringItem = {
+  product_id: number;
+  product_name: string;
+  category_name: string | null;
+  purchase_count: number;
+  avg_interval_days: number;
+  interval_cv: number;
+  avg_spend: number;
+  projected_monthly_spend: number;
+  currency: string;
+};
+export async function listRecurring(
+  token: string,
+  displayCurrency: string = "BAM",
+): Promise<{ results: RecurringItem[]; forecast_monthly_total: number; currency: string }> {
+  return apiFetch(`/recommendations/recurring?display_currency=${encodeURIComponent(displayCurrency)}`, { token });
+}
+
+export async function searchReceipts(token: string, q: string): Promise<{ results: ReceiptOut[] }> {
+  return apiFetch<{ results: ReceiptOut[] }>(
+    `/receipts/search?q=${encodeURIComponent(q)}`,
+    { token },
+  );
+}
+
+export async function exportTransactionsPdf(
+  token: string,
+  opts: { displayCurrency?: string; from?: string; to?: string } = {},
+): Promise<void> {
+  const params = new URLSearchParams();
+  if (opts.displayCurrency) params.set("display_currency", opts.displayCurrency);
+  if (opts.from) params.set("from_date", opts.from);
+  if (opts.to) params.set("to_date", opts.to);
+  const url = `${API_BASE_URL}/transactions/export.pdf?${params.toString()}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error("PDF export failed");
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "expense_report.pdf";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+export type HouseholdMember = { user_id: number; email: string; role: string };
+export type HouseholdOut = {
+  id: number;
+  name: string;
+  owner_user_id: number;
+  invite_token: string;
+  members: HouseholdMember[];
+};
+export async function listHouseholds(token: string): Promise<{ results: HouseholdOut[] }> {
+  return apiFetch<{ results: HouseholdOut[] }>("/households", { token });
+}
+export async function createHousehold(name: string, token: string): Promise<HouseholdOut> {
+  return apiFetch<HouseholdOut>("/households", { method: "POST", token, jsonBody: { name } });
+}
+export async function joinHousehold(inviteToken: string, token: string): Promise<HouseholdOut> {
+  return apiFetch<HouseholdOut>("/households/join", { method: "POST", token, jsonBody: { invite_token: inviteToken } });
 }

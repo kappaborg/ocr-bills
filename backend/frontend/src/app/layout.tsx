@@ -16,8 +16,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "FluxReceipt — Smart receipt scan",
-  description: "Receipt OCR + spending insights",
+  title: "ExTaSy — Expense Tracking System",
+  description: "Receipt OCR, multi-currency tracking, budgets, and spending insights",
 };
 
 export default function RootLayout({

@@ -1,0 +1,22 @@
+<!-- Add these keys to ios/Runner/Info.plist -->
+
+<key>NSCameraUsageDescription</key>
+<string>We need camera access to scan your receipts.</string>
+
+<key>NSPhotoLibraryUsageDescription</key>
+<string>We need photo library access to upload receipts from your gallery.</string>
+
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>We save cropped receipt images to your photo library.</string>
+
+<!-- For local development HTTP (FastAPI on localhost):
+     Add to Info.plist: -->
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+</dict>
+<!-- Remove NSAllowsArbitraryLoads for production; use HTTPS instead. -->
+
+<!-- Minimum iOS version: set in ios/Podfile:
+     platform :ios, '14.0' -->

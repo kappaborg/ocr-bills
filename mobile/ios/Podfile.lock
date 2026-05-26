@@ -1,0 +1,72 @@
+PODS:
+  - camera_avfoundation (0.0.1):
+    - Flutter
+  - Flutter (1.0.0)
+  - flutter_secure_storage (6.0.0):
+    - Flutter
+  - image_cropper (0.0.4):
+    - Flutter
+    - TOCropViewController (~> 2.7.4)
+  - image_picker_ios (0.0.1):
+    - Flutter
+  - open_file_ios (1.0.3):
+    - Flutter
+  - permission_handler_apple (9.3.0):
+    - Flutter
+  - share_plus (0.0.1):
+    - Flutter
+  - sqflite_darwin (0.0.4):
+    - Flutter
+    - FlutterMacOS
+  - TOCropViewController (2.7.4)
+
+DEPENDENCIES:
+  - camera_avfoundation (from `.symlinks/plugins/camera_avfoundation/ios`)
+  - Flutter (from `Flutter`)
+  - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
+  - image_cropper (from `.symlinks/plugins/image_cropper/ios`)
+  - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
+  - open_file_ios (from `.symlinks/plugins/open_file_ios/ios`)
+  - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
+  - share_plus (from `.symlinks/plugins/share_plus/ios`)
+  - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
+
+SPEC REPOS:
+  trunk:
+    - TOCropViewController
+
+EXTERNAL SOURCES:
+  camera_avfoundation:
+    :path: ".symlinks/plugins/camera_avfoundation/ios"
+  Flutter:
+    :path: Flutter
+  flutter_secure_storage:
+    :path: ".symlinks/plugins/flutter_secure_storage/ios"
+  image_cropper:
+    :path: ".symlinks/plugins/image_cropper/ios"
+  image_picker_ios:
+    :path: ".symlinks/plugins/image_picker_ios/ios"
+  open_file_ios:
+    :path: ".symlinks/plugins/open_file_ios/ios"
+  permission_handler_apple:
+    :path: ".symlinks/plugins/permission_handler_apple/ios"
+  share_plus:
+    :path: ".symlinks/plugins/share_plus/ios"
+  sqflite_darwin:
+    :path: ".symlinks/plugins/sqflite_darwin/darwin"
+
+SPEC CHECKSUMS:
+  camera_avfoundation: 5675ca25298b6f81fa0a325188e7df62cc217741
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
+  image_cropper: 5f162dcf988100dc1513f9c6b7eb42cd6fbf9156
+  image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
+  open_file_ios: 46184d802ee7959203f6392abcfa0dd49fdb5be0
+  permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
+  share_plus: 011d6fb4f9d2576b83179a3a5c5e323202cdabcf
+  sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
+  TOCropViewController: 80b8985ad794298fb69d3341de183f33d1853654
+
+PODFILE CHECKSUM: 7e3520e2a431d84516d6979eedf46a6ba135a5e7
+
+COCOAPODS: 1.16.2

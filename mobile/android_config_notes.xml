@@ -1,0 +1,29 @@
+<!-- Add these permissions to android/app/src/main/AndroidManifest.xml inside <manifest> -->
+
+<uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.INTERNET"/>
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+    android:maxSdkVersion="32"/>
+<uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+    android:maxSdkVersion="29"/>
+
+<uses-feature android:name="android.hardware.camera" android:required="false"/>
+
+<!-- Inside the <application> tag add: -->
+<provider
+    android:name="androidx.core.content.FileProvider"
+    android:authorities="${applicationId}.fileprovider"
+    android:exported="false"
+    android:grantUriPermissions="true">
+  <meta-data
+      android:name="android.support.FILE_PROVIDER_PATHS"
+      android:resource="@xml/file_paths"/>
+</provider>
+
+<!-- Also set minSdkVersion 21 in android/app/build.gradle:
+     defaultConfig { minSdkVersion 21 ... } -->
+
+<!-- For cleartext HTTP in debug (to reach local FastAPI at 10.0.2.2:8000):
+     Inside <application>: android:usesCleartextTraffic="true"
+     Remove this for production (use HTTPS). -->

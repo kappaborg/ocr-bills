@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.db.models import Receipt, ReceiptItem, ReceiptStatus
 from app.schemas.insights import InsightOut, InsightsListResponse
+from app.services.product_normalization import normalize_product_name
 
 
 router = APIRouter()
@@ -66,6 +67,82 @@ def list_insights(db: Session = Depends(get_db), user=Depends(get_current_user))
                 metadata_json={
                     "current_total": current_total,
                     "previous_total": previous_total,
+                },
+                created_at=now,
+            )
+        )
+
+    # Price-change: for each (store, normalized product) with ≥2 purchases in the
+    # last 90 days, compare the most recent unit_price to the previous one. Surface
+    # only changes >= 10% (in either direction) and only the largest one.
+    last_90 = now - timedelta(days=90)
+    price_rows = (
+        db.query(
+            Receipt.store_name,
+            ReceiptItem.item_name,
+            ReceiptItem.unit_price,
+            Receipt.receipt_date,
+        )
+        .join(Receipt, ReceiptItem.receipt_id == Receipt.id)
+        .filter(Receipt.user_id == user.id)
+        .filter(Receipt.processing_status == ReceiptStatus.confirmed.value)
+        .filter(Receipt.receipt_date >= last_90)
+        .filter(Receipt.receipt_date.isnot(None))
+        .filter(ReceiptItem.unit_price.isnot(None))
+        .filter(ReceiptItem.unit_price > 0)
+        .order_by(Receipt.receipt_date.asc())
+        .all()
+    )
+
+    grouped: dict[tuple[str, str], list[tuple[datetime, float]]] = {}
+    for store, name, unit_price, date in price_rows:
+        if not store or not name:
+            continue
+        norm = normalize_product_name(name)
+        if not norm:
+            continue  # Skip items whose normalized form is empty (avoid bogus pairs).
+        key = (store, norm)
+        grouped.setdefault(key, []).append((date, float(unit_price)))
+
+    best_change: tuple[float, str, str, float, float] | None = None  # (abs_pct, store, name, old, new)
+    for (store, _norm), purchases in grouped.items():
+        if len(purchases) < 2:
+            continue
+        purchases.sort(key=lambda x: x[0])
+        old_price = purchases[-2][1]
+        new_price = purchases[-1][1]
+        if old_price <= 0:
+            continue
+        pct = (new_price - old_price) / old_price * 100.0
+        if abs(pct) < 10.0:
+            continue
+        # Find the display name (last seen) for the matching key by scanning
+        # original rows — we kept normalized form to group.
+        display_name = next(
+            (n for s, n, _, _ in price_rows if s == store and normalize_product_name(n) == _norm),
+            _norm,
+        )
+        if best_change is None or abs(pct) > best_change[0]:
+            best_change = (abs(pct), store, display_name, old_price, new_price)
+
+    if best_change is not None:
+        abs_pct, store, name, old_price, new_price = best_change
+        direction = "up" if new_price > old_price else "down"
+        sign = "+" if new_price > old_price else "−"
+        insights.append(
+            InsightOut(
+                id=-4,
+                type="price_increase" if new_price > old_price else "info",
+                message=(
+                    f"'{name}' at {store}: {old_price:.2f} → {new_price:.2f} "
+                    f"({sign}{abs_pct:.0f}% {direction})."
+                ),
+                metadata_json={
+                    "product": name,
+                    "store": store,
+                    "old_price": old_price,
+                    "new_price": new_price,
+                    "pct": new_price > old_price and abs_pct or -abs_pct,
                 },
                 created_at=now,
             )

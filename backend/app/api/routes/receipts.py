@@ -2,8 +2,11 @@ import os
 import re
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile, status
+from datetime import date as _date, datetime, timedelta
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, get_db
@@ -97,6 +100,7 @@ def _get_receipt_out(receipt: Receipt) -> ReceiptOut:
         store_name=receipt.store_name,
         total_amount=receipt.total_amount,
         currency=receipt.currency,
+        tax_amount=receipt.tax_amount,
         items=items_out,
     )
 
@@ -296,17 +300,102 @@ def create_receipt_from_frame(
     return {"receipt_id": receipt.id, "processing_status": receipt.processing_status}
 
 
-@router.get("", response_model=list[ReceiptUploadResult])
+@router.get("/search")
+def search_receipts(
+    q: str = Query(..., min_length=1, max_length=200, description="Free-text search"),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    Multi-token search across receipt raw_text, store_name, and line items.
+    Tokens are AND-ed; case-insensitive; matches any token in any field.
+    """
+    init_db(db)
+    tokens = [t for t in q.split() if t]
+    if not tokens:
+        return {"results": []}
+
+    from sqlalchemy import and_, or_
+
+    conditions = []
+    for tok in tokens:
+        pattern = f"%{tok}%"
+        token_cond = or_(
+            Receipt.raw_text.ilike(pattern),
+            Receipt.store_name.ilike(pattern),
+            Receipt.id.in_(
+                db.query(ReceiptItem.receipt_id).filter(ReceiptItem.item_name.ilike(pattern))
+            ),
+        )
+        conditions.append(token_cond)
+
+    receipts = (
+        db.query(Receipt)
+        .options(selectinload(Receipt.items).selectinload(ReceiptItem.category))
+        .filter(Receipt.user_id == user.id)
+        .filter(and_(*conditions))
+        .order_by(Receipt.receipt_date.desc().nullslast(), Receipt.id.desc())
+        .limit(50)
+        .all()
+    )
+    return {"results": [_get_receipt_out(r) for r in receipts]}
+
+
+@router.get("/check-duplicate")
+def check_duplicate(
+    store_name: str = Query(..., max_length=255),
+    total_amount: float = Query(..., gt=0),
+    receipt_date: str = Query(..., description="ISO 8601 date or datetime"),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    Returns the existing receipt_id if a likely duplicate exists for this user,
+    matching on (store name case-insensitive, total ±1% tolerance, same calendar day).
+    """
+    try:
+        dt = datetime.fromisoformat(receipt_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid receipt_date — must be ISO 8601")
+
+    day_start = datetime.combine(dt.date(), datetime.min.time())
+    day_end = day_start + timedelta(days=1)
+    tol = max(0.01, total_amount * 0.01)
+
+    existing = (
+        db.query(Receipt)
+        .filter(Receipt.user_id == user.id)
+        .filter(Receipt.store_name.ilike(store_name))
+        .filter(Receipt.total_amount.between(total_amount - tol, total_amount + tol))
+        .filter(Receipt.receipt_date >= day_start, Receipt.receipt_date < day_end)
+        .first()
+    )
+    if existing is None:
+        return {"duplicate": False}
+    return {
+        "duplicate": True,
+        "receipt_id": existing.id,
+        "store_name": existing.store_name,
+        "total_amount": existing.total_amount,
+        "receipt_date": existing.receipt_date,
+    }
+
+
+@router.get("", response_model=list[ReceiptOut])
 def list_receipts(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
     init_db(db)
-    receipts = db.query(Receipt).filter(Receipt.user_id == user.id).order_by(Receipt.id.desc()).limit(50).all()
-    return [
-        {"receipt_id": r.id, "processing_status": r.processing_status}
-        for r in receipts
-    ]
+    receipts = (
+        db.query(Receipt)
+        .options(selectinload(Receipt.items))
+        .filter(Receipt.user_id == user.id)
+        .order_by(Receipt.id.desc())
+        .limit(50)
+        .all()
+    )
+    return [_get_receipt_out(r) for r in receipts]
 
 
 @router.get("/{receipt_id}/image")

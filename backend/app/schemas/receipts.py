@@ -29,6 +29,7 @@ class ReceiptOut(BaseModel):
     store_name: Optional[str] = None
     total_amount: Optional[float] = None
     currency: Optional[str] = None
+    tax_amount: Optional[float] = None
 
     items: list[ReceiptItemOut] = []
 

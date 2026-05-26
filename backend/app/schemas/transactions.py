@@ -13,6 +13,8 @@ class TransactionOut(BaseModel):
     quantity: Optional[float] = None
     unit_price: Optional[float] = None
     item_price: float
+    currency: Optional[str] = None
+    category_id: Optional[int] = None
     category_name: Optional[str] = None
 
     class Config:

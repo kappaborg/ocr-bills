@@ -43,6 +43,8 @@ class User(Base):
     insights = relationship("Insight", back_populates="user")
     products = relationship("Product", back_populates="user")
     inventory_items = relationship("InventoryItem", back_populates="user")
+    budgets = relationship("Budget", back_populates="user")
+    household_memberships = relationship("HouseholdMember", back_populates="user")
 
 
 class ReceiptStatus(str, enum.Enum):
@@ -73,11 +75,18 @@ class Receipt(Base):
     processing_status: Mapped[str] = mapped_column(String(32), default=ReceiptStatus.queued.value)
     processing_error: Mapped[str] = mapped_column(Text, nullable=True)
 
+    # Optional household scope — when set, receipt is visible to all household members.
+    household_id: Mapped[int] = mapped_column(Integer, ForeignKey("households.id"), nullable=True, index=True)
+
+    # Parsed PDV/VAT amount in the receipt's currency (None when undetected).
+    tax_amount: Mapped[float] = mapped_column(Float, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     user = relationship("User", back_populates="receipts")
     items = relationship("ReceiptItem", back_populates="receipt", cascade="all, delete-orphan")
+    household = relationship("Household", back_populates="receipts")
 
 
 class ReceiptItem(Base):
@@ -150,6 +159,54 @@ class InventoryItem(Base):
 
     user = relationship("User", back_populates="inventory_items")
     product = relationship("Product", back_populates="inventory")
+
+
+class Budget(Base):
+    """Monthly spending limit per category for a single user, in any currency."""
+
+    __tablename__ = "budgets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
+    category_id: Mapped[int] = mapped_column(Integer, ForeignKey("categories.id"), nullable=True)
+
+    monthly_limit: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(8), default="BAM")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    user = relationship("User", back_populates="budgets")
+    category = relationship("Category")
+
+
+class Household(Base):
+    """A group of users who share receipts (e.g. a family or couple)."""
+
+    __tablename__ = "households"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128))
+    owner_user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
+    # Random share-link token; anyone with this token can join.
+    invite_token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    members = relationship("HouseholdMember", back_populates="household", cascade="all, delete-orphan")
+    receipts = relationship("Receipt", back_populates="household")
+
+
+class HouseholdMember(Base):
+    __tablename__ = "household_members"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    household_id: Mapped[int] = mapped_column(Integer, ForeignKey("households.id"), index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
+    role: Mapped[str] = mapped_column(String(16), default="member")  # 'owner' | 'member'
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    household = relationship("Household", back_populates="members")
+    user = relationship("User", back_populates="household_memberships")
 
 
 class InsightType(str, enum.Enum):

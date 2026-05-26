@@ -18,6 +18,7 @@ _CURRENCY_SYMBOLS: list[tuple[str, str]] = [
     ("BAM", "KM"),
     ("GBP", "£"),
     ("JPY", "¥"),
+    ("CNY", "¥"),   # shared ¥ — CNY detected via language context
     ("INR", "₹"),
     ("KRW", "₩"),
     ("RUB", "₽"),
@@ -26,21 +27,44 @@ _CURRENCY_SYMBOLS: list[tuple[str, str]] = [
     ("CAD", "CA$"),
     ("AUD", "A$"),
     ("CHF", "CHF"),
+    ("SGD", "S$"),
+    ("HKD", "HK$"),
+    ("TWD", "NT$"),
+    ("PHP", "₱"),
+    ("VND", "₫"),
+    ("THB", "฿"),
+    ("ILS", "₪"),
+    ("UAH", "₴"),
+    ("GEL", "₾"),
+    ("AMD", "֏"),
+    ("AZN", "₼"),
+    ("KZT", "₸"),
+    ("NGN", "₦"),
+    ("MYR", "RM"),
+    ("IDR", "Rp"),
+    ("ZAR", "R"),
+    ("PLN", "zł"),
+    ("HUF", "Ft"),
 ]
 
 _CURRENCY_CODES = {
     "USD", "EUR", "GBP", "JPY", "CNY", "INR", "KRW", "RUB", "TRY",
     "BRL", "CAD", "AUD", "CHF", "SEK", "NOK", "DKK", "BAM",
-    # Balkan currencies
-    "RSD",   # Serbian dinar
-    "HRK",   # Croatian kuna (historical, still on older receipts)
-    "MKD",   # Macedonian denar
-    "ALL",   # Albanian lek
-    "BGN",   # Bulgarian lev
-    "HUF",   # Hungarian forint
-    "RON",   # Romanian leu
-    "PLN",   # Polish zloty
-    "CZK",   # Czech koruna
+    # European
+    "RSD", "HRK", "MKD", "ALL", "BGN", "HUF", "RON", "PLN", "CZK",
+    "MDL", "GEL", "AMD", "AZN",
+    # Middle East / Africa
+    "AED", "SAR", "QAR", "KWD", "BHD", "OMR", "JOD", "EGP", "MAD",
+    "DZD", "TND", "ILS", "TRY", "IRR", "IQD", "LBP",
+    "ZAR", "NGN", "GHS", "KES", "ETB", "TZS", "UGX", "XOF", "XAF",
+    # Asia-Pacific
+    "SGD", "HKD", "TWD", "THB", "IDR", "MYR", "PHP", "VND", "KHR",
+    "MMK", "LAK", "BDT", "LKR", "NPR", "PKR", "MNT", "KZT", "UZS",
+    "KGS", "TJS", "TMT",
+    # Americas
+    "MXN", "ARS", "CLP", "COP", "PEN", "BOB", "PYG", "UYU",
+    # Other
+    "NZD", "UAH",
 }
 
 # Keywords that must never become items (totals, taxes, fiscal IDs, payment lines, discounts)
@@ -48,24 +72,56 @@ _EXCLUDE_LINE_KEYWORDS = {
     # Fiscal IDs
     "JIB", "PIB", "IBF", "RAC", "FISKAL",
     # Tax/VAT
-    "VE", "VA", "OSN", "PDU", "PDV", "POV", "POREZ", "TAX", "VAT",
-    # Totals / payment
+    "VE", "VA", "OSN", "PDU", "PDV", "POV", "POREZ", "TAX", "VAT", "MWST", "TVA", "IVA", "GST", "KDV",
+    # Totals / payment — Latin/Cyrillic
     "UKUPNO", "UPLACENO", "UPLATENO", "GOTOVINA", "POVRAT",
     "TOTAL", "TOIAL", "CHANGE", "CASH", "CARD",
     "PLAĆANJE", "PLACANJE", "PLATITI", "ZA PLATI", "IZNOS",
     "SVEUKUPNO", "SUBTOTAL", "PODRACUN", "PODRAČUN",
+    # German
+    "GESAMT", "SUMME", "BETRAG", "GESAMTBETRAG", "ZAHLBETRAG", "ZWISCHENSUMME",
+    # French
+    "MONTANT", "PAYER", "SOUS-TOTAL",
+    # Spanish / Italian
+    "IMPORTE", "TOTALE", "SUBTOTALE",
+    # Dutch
+    "TOTAAL", "BEDRAG",
+    # Scandinavian
+    "SUMMA", "BELOPP",
+    # Polish
+    "RAZEM", "KWOTA",
+    # Turkish
+    "TOPLAM", "TUTAR",
     # Discounts
-    "RABAT", "POPUST", "DISCOUNT",
+    "RABAT", "POPUST", "DISCOUNT", "SCONTO", "REMISE", "RABATT",
     # Copy / receipt type markers
     "KOPIJA", "DUPLICATE",
-    # Russian totals
-    "ИТОГО", "ОПЛАТЕ", "ВСЕГО", "СУММА",
+    # Russian / Cyrillic
+    "ИТОГО", "ОПЛАТЕ", "ВСЕГО", "СУММА", "РАЗОМ", "УСЬОГО",
+    # Ukrainian
+    "СПЛАТИ",
+    # Bulgarian
+    "ОБЩО",
 }
+
+# Arabic-Indic and other non-ASCII numeral translation table → ASCII digits
+_NUMERAL_TABLE = str.maketrans(
+    "٠١٢٣٤٥٦٧٨٩"   # Arabic-Indic
+    "۰۱۲۳۴۵۶۷۸۹"   # Extended Arabic-Indic (Urdu/Farsi)
+    "०१२३४५६७८९"   # Devanagari
+    "๐๑๒๓๔๕๖๗๘๙"   # Thai
+    "০১২৩৪৫৬৭৮৯"   # Bengali
+    "૦૧૨૩૪૫૬૭૮૯"   # Gujarati
+    "੦੧੨੩੪੫੬੭੮੯"   # Gurmukhi
+    "၀၁၂၃၄၅၆၇၈၉"   # Myanmar
+    "០១២៣៤៥៦៧៨៩",  # Khmer
+    "0123456789" * 9,
+)
 
 # Tax rate line: "PDV 17%: 8.37", "VAT 8.5%", "17% PDV" — exclude from items
 _TAX_RATE_LINE_RE = re.compile(
-    r'\b(?:PDV|VAT|POREZ|TAX|OSN|MWS|TVA|IVA|GST|MWST|PDVO|ПОРЕЗ)\b[^%\n]*\d+[.,]?\d*\s*%'
-    r'|\d+[.,]?\d*\s*%[^%\n]*\b(?:PDV|VAT|POREZ|TAX|OSN)\b',
+    r'\b(?:PDV|VAT|POREZ|TAX|OSN|MWS|TVA|IVA|GST|MWST|PDVO|ПОРЕЗ|KDV|HST|PST)\b[^%\n]*\d+[.,]?\d*\s*%'
+    r'|\d+[.,]?\d*\s*%[^%\n]*\b(?:PDV|VAT|POREZ|TAX|OSN|KDV)\b',
     flags=re.IGNORECASE,
 )
 
@@ -81,19 +137,21 @@ _QTY_X_UNIT_RE = re.compile(
     flags=re.IGNORECASE,
 )
 
-# 4-column tabular: NAME  QTY  UNIT_PRICE  TOTAL  (separated by 2+ spaces or tab)
-# Optional trailing single tax-class letter (A/B on BiH receipts)
+# 4-column tabular: NAME  QTY  UNIT_PRICE  TOTAL  (2+ spaces or tab)
+# Name starts with any Unicode letter (Arabic, CJK, Thai, Latin, Cyrillic, etc.)
 _FOUR_COL_RE = re.compile(
-    r'^(?P<name>[A-Za-zÀ-ɏЀ-ӿ]'
-    r'[A-Za-zÀ-ɏЀ-ӿ0-9\s\.\-\_\/\(\)]*?)\s{2,}'
+    r'^(?P<name>[^\W\d_]'                         # first char: any Unicode letter
+    r'[\w\s.\-_/()؀-ۿ฀-๿'    # body: Unicode word chars + common scripts
+    r'一-鿿぀-ヿ가-퟿]*?)\s{2,}'
     r'(?P<qty>\d+(?:[.,]\d{1,3})?)\s+'
     r'(?P<unit>\d[\d.,]*)\s+'
     r'(?P<total>\d[\d.,]+)\s*[A-Za-z]?\s*$',
+    re.UNICODE,
 )
 
 # Simple line-ends-in-price pattern (module-level for reuse)
 _LINE_PRICE_PAT = re.compile(
-    r'^(?P<name>.+?)\s+(?P<cur>[$€£¥₹₩₽₺]|[A-Z]{3})?\s*(?P<num>\d[\d\s.,]*)\s*(?:[A-Z*])?\s*$',
+    r'^(?P<name>.+?)\s+(?P<cur>[$€£¥₹₩₽₺₱₫฿₪₴₾₼₸₦]|[A-Z]{3})?\s*(?P<num>\d[\d\s.,]*)\s*(?:[A-Z*])?\s*$',
     flags=re.IGNORECASE,
 )
 _MONEY_DECIMAL_RE = re.compile(r'\d[\d\s]*[.,]\d{1,3}')
@@ -103,6 +161,35 @@ _STORE_SKIP_KW_RE = re.compile(
     r'\b(?:JIB|PIB|IBF|PDV|VAT|FISKAL|FISKALNI|RAČUN|RACUN|UKUPNO|UPLACENO|UPLAĆENO|GOTOVINA)\b',
     flags=re.IGNORECASE,
 )
+
+
+# Tax-amount line: matches lines like "UKUPNO PDV: 8.37", "PDV: 8.37", "VAT 1.25",
+# "PDV 17% 8.37" — captures the final monetary amount, not the rate percent.
+_TAX_AMOUNT_RE = re.compile(
+    r'\b(?:UKUPNO\s+)?(?:PDV|VAT|POREZ|MWST|TVA|IVA|GST|KDV)\b'
+    r'(?:[^\d\n%]{0,30}\d+(?:[.,]\d+)?\s*%)?'   # optional inline rate "17%"
+    r'[^\n\d-]*?(?P<amount>\d{1,5}[.,]\d{2})',
+    flags=re.IGNORECASE,
+)
+
+
+def extract_tax_amount(text: str) -> Optional[float]:
+    """
+    Detect the PDV/VAT amount paid on a receipt. Returns the largest plausible
+    match (handles split rates like '17% PDV: 6.20 + 5% PDV: 0.50').
+    """
+    if not text:
+        return None
+    best: Optional[float] = None
+    for m in _TAX_AMOUNT_RE.finditer(text):
+        s = m.group("amount").replace(",", ".")
+        try:
+            value = float(s)
+        except ValueError:
+            continue
+        if 0.01 <= value <= 100_000:
+            best = value if best is None else max(best, value)
+    return best
 
 
 @dataclass
@@ -132,7 +219,8 @@ def _normalize(text: str) -> str:
 def _clean_item_name(name: str) -> str:
     """Normalize an OCR item name: remove bad punctuation and fold whitespace."""
     name = re.sub(r"['\"`{}\[\]\(\)\|]", " ", name)
-    name = re.sub(r"[^0-9A-Za-zÀ-ɏЀ-ӿ\s&\-\.]", " ", name)
+    # Keep Unicode word chars, spaces, and common punctuation; strip everything else
+    name = re.sub(r"[^\w\s&\-\.]", " ", name, flags=re.UNICODE)
     name = re.sub(r"\s+", " ", name).strip()
     return name
 
@@ -195,6 +283,14 @@ def detect_currency(text: str) -> Optional[str]:
     if re.search(r"\bDIN\b", t, flags=re.IGNORECASE) and not looks_like_bosnia_fiscal_receipt(t):
         return "RSD"
 
+    # UAE dirham
+    if re.search(r"\bAED\b|\bد\.إ\b|درهم", t):
+        return "AED"
+
+    # Saudi riyal
+    if re.search(r"\bSAR\b|\bر\.س\b|ريال", t):
+        return "SAR"
+
     for code, symbol in _CURRENCY_SYMBOLS:
         if not symbol:
             continue
@@ -211,23 +307,15 @@ def detect_currency(text: str) -> Optional[str]:
 def detect_store_name(text: str) -> Optional[str]:
     """
     Return the most likely store/company name from the receipt header.
-
-    Skips:
-    - Separator lines (dashes, equals, asterisks)
-    - Purely numeric / fiscal-code lines
-    - Lines containing fiscal/tax keywords (JIB, PIB, PDV, FISKAL, …)
-    - Date / time lines
-    - Phone-number-like lines
-    - Lines starting with a digit followed by a word (street addresses)
-    - Lines shorter than 3 alpha chars
     """
     for line in (text or "").splitlines()[:30]:
         line = line.strip()
         if not line:
             continue
 
-        alpha_chars = [ch for ch in line if ch.isalpha()]
-        if len(alpha_chars) < 3:
+        # Must have at least 3 characters that are letters in any script
+        letter_chars = [ch for ch in line if re.match(r"[^\W\d_]", ch, re.UNICODE)]
+        if len(letter_chars) < 3:
             continue
 
         # Separator / noise lines
@@ -256,7 +344,7 @@ def detect_store_name(text: str) -> Optional[str]:
         if re.match(r"^\d+\s+[A-Za-zÀ-ɏЀ-ӿ]", line):
             continue
 
-        words = re.findall(r"[a-zA-ZÀ-ɏЀ-ӿ]{2,}", line)
+        words = re.findall(r"[^\W\d_]{2,}", line, re.UNICODE)
         if not words:
             continue
 
@@ -273,8 +361,10 @@ def parse_money_number(raw: str) -> Optional[float]:
     """
     Convert locale-specific number strings to float.
 
-    Handles: '12.34', '12,34', '1,234.56', '1.234,56', '1 234,56', '1 234.56'
-    Also corrects common OCR artefacts like 'O' → '0' in numeric context.
+    Handles:
+    - Western: '12.34', '12,34', '1,234.56', '1.234,56', '1 234,56'
+    - Arabic-Indic, Extended Arabic-Indic, Devanagari, Thai, Bengali,
+      Gujarati, Gurmukhi, Myanmar, Khmer numerals
     """
     if raw is None:
         return None
@@ -282,6 +372,11 @@ def parse_money_number(raw: str) -> Optional[float]:
     s = str(raw).strip()
     if not s:
         return None
+
+    # Normalize non-ASCII numerals to ASCII digits
+    s = s.translate(_NUMERAL_TABLE)
+    # Normalize Arabic decimal/thousands separators
+    s = s.replace("٫", ".").replace("٬", ",")  # ٫ → .  ٬ → ,
 
     # OCR artefact: letter O mistaken for digit 0
     s = re.sub(r'(?<=[,.\s\d])[Oo](?=[,.\s\d]|$)', '0', s)
@@ -339,32 +434,83 @@ def extract_total_amount(text: str, currency: Optional[str]) -> Optional[float]:
     Find the grand total amount from a receipt.
 
     Strategy:
-    1. Scan for all "real total" keyword matches (UKUPNO, TOTAL, ИТОГО, etc.)
-       and return the LAST one (grand total is always after subtotals).
+    1. Scan for all "real total" keyword matches across 25+ languages and return the LAST one.
     2. Fall back to UPLACENO / GOTOVINA (cash paid) if no keyword total found.
     3. Last resort: single currency-symbol match.
     """
-    # Ordered by priority — UKUPNO ZA PLATITI > UKUPNO > TOTAL
-    # We collect ALL numeric matches and return the last one.
+    # Normalize non-ASCII numerals first
+    text_norm = (text or "").translate(_NUMERAL_TABLE)
+
+    _N = r"(?P<num>\d[\d \t.,]*)"
+
     total_patterns = [
         # English
-        r"(?:Grand\s+Total|Total\s+Due|Amount\s+Due|Balance\s+Due|TOTAL)[ \t]*[:\-]?[ \t]*"
-        r"(?:[$€£¥₹₩₽₺]|[A-Z]{3})?[ \t]*(?P<num>\d[\d \t.,]*)\b",
-        # BiH / Serbian / Croatian — extended form first (more specific)
-        r"(?:UKUPNO\s+ZA\s+PLATI(?:TI)?|UKUPNO\s+ZA\s+PLA[ĆC]ANJE|SVEUKUPNO)"
-        r"[ \t]*[:\-]?[ \t]*(?P<num>\d[\d \t.,]*)\b",
-        r"(?:UKUPNO|ZA\s+PLA[ĆC]ANJE|ZA\s+PLATI(?:TI)?|IZNOS)[^\n\r0-9]*"
-        r"(?P<num>\d[\d \t.,]*)\b",
+        rf"(?:Grand\s+Total|Total\s+Due|Amount\s+Due|Balance\s+Due|Net\s+Total|TOTAL)[ \t]*[:\-]?[ \t]*"
+        rf"(?:[$€£¥₹₩₽₺₱₫฿₪₴₾₼₸₦]|[A-Z]{{3}})?[ \t]*{_N}\b",
+        # BiH / Serbian / Croatian
+        rf"(?:UKUPNO\s+ZA\s+PLATI(?:TI)?|UKUPNO\s+ZA\s+PLA[ĆC]ANJE|SVEUKUPNO)"
+        rf"[ \t]*[:\-]?[ \t]*{_N}\b",
+        rf"(?:UKUPNO|ZA\s+PLA[ĆC]ANJE|ZA\s+PLATI(?:TI)?|IZNOS)[^\n\r0-9]*{_N}\b",
         # Russian
-        r"(?:ИТОГО\s+К\s+ОПЛАТЕ|ИТОГО|К\s+ОПЛАТЕ|ВСЕГО|СУММА)[ \t]*[:\-]?[ \t]*"
-        r"(?P<num>\d[\d \t.,]*)\b",
+        rf"(?:ИТОГО\s+К\s+ОПЛАТЕ|ИТОГО|К\s+ОПЛАТЕ|ВСЕГО|СУММА)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Ukrainian
+        rf"(?:РАЗОМ|ДО\s+СПЛАТИ|УСЬОГО|ЗАГАЛЬНА\s+СУМА)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Bulgarian
+        rf"(?:ОБЩО|ЗА\s+ПЛАЩАНЕ|СУМА)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # German
+        rf"(?:GESAMTBETRAG|GESAMT|ZAHLBETRAG|ZU\s+ZAHLEN|SUMME|RECHNUNGSBETRAG|BETRAG)"
+        rf"[ \t]*[:\-]?[ \t]*{_N}\b",
+        # French
+        rf"(?:MONTANT\s+TTC|TOTAL\s+TTC|NET\s+À\s+PAYER|TOTAL\s+À\s+PAYER|MONTANT\s+TOTAL|MONTANT)"
+        rf"[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Spanish
+        rf"(?:IMPORTE\s+TOTAL|TOTAL\s+A\s+PAGAR|TOTAL\s+GENERAL|IMPORTE)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Italian
+        rf"(?:TOTALE\s+COMPLESSIVO|TOTALE\s+GENERALE|IMPORTO\s+TOTALE|DA\s+PAGARE|TOTALE)"
+        rf"[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Dutch
+        rf"(?:TOTAAL\s+BEDRAG|TE\s+BETALEN|TOTAAL)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Swedish / Norwegian / Danish
+        rf"(?:ATT\s+BETALA|Å\s+BETALE|I\s+ALT|TOTALT|SUMMA|BELOPP)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Finnish
+        rf"(?:YHTEENSÄ|MAKSETTAVA\s+SUMMA|MAKSETTAVA)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Polish
+        rf"(?:DO\s+ZAP[ŁL]ATY|[ŁL]ĄCZNA\s+KWOTA|RAZEM)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Czech / Slovak
+        rf"(?:K\s+[ÚU]HRAD[ĚE]|CELKOV[AÁ]\s+[ČC][ÁA]STKA|CELKEM)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Hungarian
+        rf"(?:FIZETEND[OŐ]|V[EÉ]G[OÖ]SSZEG|[OÖ]SSZESEN)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Romanian
+        rf"(?:DE\s+PLAT[AĂ]|SUMA\s+TOTAL[AĂ]|TOTAL)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Turkish
+        rf"(?:GENEL\s+TOPLAM|[OÖ]DENECEK\s+TUTAR|TOPLAM\s+TUTAR|TOPLAM|TUTAR)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Arabic (right-to-left; OCR may produce partial matches)
+        rf"(?:المجموع\s+الكلي|الإجمالي|المبلغ\s+الإجمالي|المجموع|مجموع)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Hebrew
+        rf'(?:סה"כ\s+לתשלום|לתשלום|סה"כ|סכום)[ \t]*[:\-]?[ \t]*{_N}\b',
+        # Greek
+        rf"(?:ΣΥΝΟΛΟ\s+ΠΛΗΡΩΤΕΟ|ΠΛΗΡΩΤΕΟ|ΣΥΝΟΛΟ)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Chinese Simplified
+        rf"(?:应付金额|实付金额|结账金额|应付|总计|合计|小计)[ \t]*[:\-]?[ \t]*[¥￥]?{_N}\b",
+        # Chinese Traditional / Hong Kong
+        rf"(?:應付金額|實付金額|合計|總計|小計)[ \t]*[:\-]?[ \t]*[¥$]?{_N}\b",
+        # Japanese
+        rf"(?:お支払合計|お会計|ご請求額|合計金額|合計|小計)[ \t]*[:\-]?[ \t]*[¥￥]?{_N}\b",
+        # Korean
+        rf"(?:합계\s*금액|결제\s*금액|총\s*금액|합\s*계|총액)[ \t]*[:\-]?[ \t]*[₩]?{_N}\b",
+        # Thai
+        rf"(?:ยอดรวมทั้งสิ้น|ยอดชำระ|ยอดรวม|รวมทั้งสิ้น|รวม)[ \t]*[:\-]?[ \t]*[฿]?{_N}\b",
+        # Vietnamese
+        rf"(?:TỔNG\s+CỘNG|TỔNG\s+TIỀN|THÀNH\s+TIỀN|CỘNG)[ \t]*[:\-]?[ \t]*{_N}\b",
+        # Indonesian / Malay
+        rf"(?:TOTAL\s+BAYAR|JUMLAH\s+BAYAR|JUMLAH|TOTAL)[ \t]*[:\-]?[ \t]*{_N}\b",
         # OCR error variants of TOTAL
-        r"(?:T[O0]IAL|T0TAL)[ \t]*[:\-]?[ \t]*(?P<num>\d[\d \t.,]*)\b",
+        rf"(?:T[O0]IAL|T0TAL)[ \t]*[:\-]?[ \t]*{_N}\b",
     ]
 
     all_vals: list[float] = []
     for pat in total_patterns:
-        for m in re.finditer(pat, text, flags=re.IGNORECASE):
+        for m in re.finditer(pat, text_norm, flags=re.IGNORECASE | re.UNICODE):
             raw = m.group("num") if "num" in m.groupdict() else None
             if raw:
                 val = parse_money_number(raw.strip())
@@ -372,23 +518,23 @@ def extract_total_amount(text: str, currency: Optional[str]) -> Optional[float]:
                     all_vals.append(val)
 
     if all_vals:
-        # Return the LAST match — grand total always appears after subtotals on a receipt
         return all_vals[-1]
 
-    # Fallback: UPLACENO / GOTOVINA (cash tendered — equals total for exact-change receipts)
+    # Fallback: UPLACENO / GOTOVINA (cash tendered)
     for kw_pat in [
-        r"(?:UPLACENO|UPLAĆENO|GOTOVINA)[ \t]*[:\-]?[ \t]*(?P<num>\d[\d \t.,]*)\b",
+        rf"(?:UPLACENO|UPLAĆENO|GOTOVINA)[ \t]*[:\-]?[ \t]*{_N}\b",
+        rf"(?:НАЛИЧНЫЕ|ОПЛАЧЕНО|ВНЕСЕНО)[ \t]*[:\-]?[ \t]*{_N}\b",
     ]:
-        m = re.search(kw_pat, text, flags=re.IGNORECASE)
+        m = re.search(kw_pat, text_norm, flags=re.IGNORECASE)
         if m:
             val = parse_money_number(m.group("num").strip())
             if val and val > 0:
                 return val
 
-    # Single currency symbol fallback
+    # Single currency symbol/code fallback
     found = re.findall(
-        r"(?:(?:\bUSD\b|\bEUR\b|\bGBP\b|\bBAM\b|\bRSD\b)|[$€£])\s*(\d[\d\s.,]*)",
-        text,
+        r"(?:(?:\bUSD\b|\bEUR\b|\bGBP\b|\bBAM\b|\bRSD\b)|[$€£¥₹₩₽₺₱₫฿₪₴])\s*(\d[\d\s.,]*)",
+        text_norm,
         flags=re.IGNORECASE,
     )
     if len(found) == 1:
@@ -403,14 +549,17 @@ def extract_items(text: str, currency: Optional[str]) -> list[ParsedItem]:
 
     Handles:
     A. Simple:        NAME  PRICE
-    B. Qty × Unit:   NAME  QTY×UNIT_PRICE  TOTAL      (e.g. "Mleko 2x1.50 3.00")
-    C. 4-column:     NAME  QTY  UNIT_PRICE  TOTAL      (tabular supermarket format)
-    D. Name has size: HLJEB 0.5KG  1.20                (one decimal in name, one is price)
+    B. Qty × Unit:   NAME  QTY×UNIT_PRICE  TOTAL
+    C. 4-column:     NAME  QTY  UNIT_PRICE  TOTAL  (tabular)
+    D. Name has size: HLJEB 0.5KG  1.20
     E. Tax lines, discounts, and payment lines are all excluded.
     """
     items: list[ParsedItem] = []
 
-    for raw_line in (text or "").splitlines():
+    # Normalize non-ASCII numerals in the text before parsing
+    text_norm = (text or "").translate(_NUMERAL_TABLE)
+
+    for raw_line in text_norm.splitlines():
         line = raw_line.strip()
         if not line:
             continue
@@ -423,7 +572,6 @@ def extract_items(text: str, currency: Optional[str]) -> list[ParsedItem]:
             continue
         if re.search(r"(?:TOTAL|AMOUNT DUE|CHANGE|CASH|CARD)\b", line, flags=re.IGNORECASE):
             continue
-        # Skip tax rate lines: "PDV 17%: 8.37", "17% VAT", etc.
         if _TAX_RATE_LINE_RE.search(line):
             continue
         # Skip separator / decoration lines
@@ -458,7 +606,6 @@ def extract_items(text: str, currency: Optional[str]) -> list[ParsedItem]:
             unit = parse_money_number(m.group("unit"))
             total = parse_money_number(m.group("total"))
             if name and len(name) >= 2 and total and 0 < total <= 10_000:
-                # Cross-check qty × unit ≈ total (within 5 % tolerance for rounding)
                 conf = 0.75
                 if qty and unit:
                     expected = qty * unit
@@ -479,15 +626,12 @@ def extract_items(text: str, currency: Optional[str]) -> list[ParsedItem]:
         n_money = len(_MONEY_DECIMAL_RE.findall(line))
 
         if n_money >= 2:
-            # 2+ decimal numbers but no multi-column match.
-            # Accept ONLY if exactly 2 money numbers and the line has meaningful text
-            # (handles "HLJEB 0.5KG  1.20" where 0.5 is part of the product descriptor).
             if n_money == 2:
                 m = _LINE_PRICE_PAT.match(line)
                 if m:
                     name_raw = m.group("name").strip()
-                    # Require at least one letter in the name portion
-                    if re.search(r"[a-zA-ZÀ-ɏЀ-ӿ]", name_raw):
+                    # Require at least one letter (any script) in the name
+                    if re.search(r"[^\W\d_]", name_raw, re.UNICODE):
                         name = _clean_item_name(name_raw)
                         price = parse_money_number(m.group("num"))
                         if name and len(name) >= 2 and price and 0 < price <= 10_000:
@@ -500,7 +644,6 @@ def extract_items(text: str, currency: Optional[str]) -> list[ParsedItem]:
                                     confidence_score=0.55,
                                 )
                             )
-            # 3+ money numbers that didn't match any pattern → likely a header/summary, skip.
             continue
 
         # Standard simple pattern: "Item name  12.34"
@@ -529,7 +672,7 @@ def extract_items(text: str, currency: Optional[str]) -> list[ParsedItem]:
     # ── Fallback: lightweight token scan if nothing found ────────────────────
     if not items:
         token_pat = re.compile(r"(?P<name>.+?)\s+(?P<num>\d[\d\s.,]*)\b")
-        for raw_line in (text or "").splitlines():
+        for raw_line in text_norm.splitlines():
             line = raw_line.strip()
             if not line:
                 continue

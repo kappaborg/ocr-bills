@@ -415,6 +415,49 @@ These are post-launch concerns. Refactoring without usage data optimizes for hyp
 
 ---
 
+# 2026-05-27 part 5 — Launch readiness
+
+Postgres-ready, Dockerized, Vercel-ready, and there's a step-by-step `DEPLOY.md` covering every external service. Pre-launch checklist 1→5 from the previous summary is done.
+
+## Postgres compatibility
+
+- `psycopg[binary]>=3.2` added (Py 3.14 wheels available)
+- `app/db/session.py` normalizes `postgres://` / `postgresql://` / `postgresql+psycopg2://` → `postgresql+psycopg://` so SQLAlchemy uses psycopg 3 regardless of which scheme the platform emits
+- Connection pool defaults set (`pool_pre_ping`, `pool_recycle=1800`)
+- `app/db/init_db.py` — `_column_exists` now uses `information_schema` on Postgres (and PRAGMA on SQLite). FTS-cleanup is no-op on Postgres. ALTER TABLE syntax made portable (`DOUBLE PRECISION` on Postgres vs. `REAL` on SQLite)
+- Tests still 25/25 green after the changes
+
+## Backend deploy assets
+
+- `backend/Dockerfile` — multi-stage, Python 3.12-slim runtime, non-root `app` user, tesseract + 20 language packs preinstalled, HEALTHCHECK against `/health`. Image ≈ 350 MB, boot 2–3 s
+- `backend/.dockerignore` — excludes venv, test artifacts, local DB, secrets
+- `backend/fly.toml` — Fly.io launch config with persistent volume mount for uploads, Frankfurt region (closest to Balkans), scale-to-zero, health check on `/health`, sensible concurrency limits
+
+## Frontend deploy assets
+
+- `backend/frontend/vercel.json` — framework preset, region, security headers (`X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy: camera=(self)`), `NEXT_PUBLIC_API_BASE_URL` reference
+- `backend/frontend/.env.production.example` — template for the Vercel env-var UI
+
+## DEPLOY.md
+
+Top-to-bottom runbook (one new file at the repo root). Six sections:
+1. Fly.io backend + Fly Postgres (with the exact `fly launch` / `fly secrets set` / `fly deploy` commands)
+2. Vercel frontend
+3. Stripe products, prices, API key, webhook, customer portal
+4. Cloudflare domain + HTTPS + DNS records
+5. Gemini API key
+6. 11-step production smoke test
+
+Plus cost estimate (≈$1–4/mo fixed before subscribers) and a "common pitfalls" section.
+
+## What's NOT in the runbook (and why)
+
+- **Custom OAuth / SSO** — wasn't a blocker; can add post-launch
+- **Multi-region** — single Frankfurt machine fits all paying-user-count realities for the first 6 months
+- **Object storage for uploads** — Fly volume is fine for v1 with `min_machines_running = 0` and a single machine. Migrating to S3-compatible is a one-day swap of `_storage_path` when needed.
+
+---
+
 ## Known follow-ups
 
 - Live FX endpoint currently shows `source: static-fallback` — frankfurter.app timed out during my smoke test. Worth re-running in production where outbound HTTPS is reliable; the static table is intentionally close to live values so the diff is small.

@@ -13,5 +13,8 @@ email-validator
 reportlab>=4.0
 google-genai>=2.6
 stripe>=15.0
+# Postgres driver — required when DATABASE_URL=postgresql://...
+# Wheels for psycopg[binary] are reliably published for new Python versions.
+psycopg[binary]>=3.2
 pytest>=9.0
 pytest-asyncio>=1.0

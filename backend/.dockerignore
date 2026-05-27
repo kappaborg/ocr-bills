@@ -1,0 +1,35 @@
+# Don't ship dev artifacts into production images.
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local dev data — never put real user data in the image.
+storage/uploads/*
+storage/*.db
+storage/*.db-journal
+
+# Editor / OS noise
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Secrets — should come from runtime env, never the image.
+.env
+.env.local
+.env.*
+
+# Tests aren't part of the runtime image.
+tests/
+
+# Frontend code lives outside this build context anyway, but be explicit.
+frontend/

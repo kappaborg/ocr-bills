@@ -1,0 +1,60 @@
+# Fly.io deployment config for the ExTaSy backend.
+#
+# Quick start (run from backend/):
+#   fly launch --no-deploy        # creates the app + reads this file
+#   fly volumes create extasy_uploads --size 1 --region fra
+#   fly postgres create --name extasy-db --region fra
+#   fly postgres attach extasy-db
+#   fly secrets set JWT_SECRET="$(openssl rand -hex 32)"
+#   fly secrets set STRIPE_SECRET_KEY="sk_test_..."
+#   fly secrets set STRIPE_WEBHOOK_SECRET="whsec_..."
+#   fly secrets set STRIPE_PRICE_PRO="price_..."
+#   fly secrets set STRIPE_PRICE_BUSINESS="price_..."
+#   fly secrets set GEMINI_API_KEY="..."
+#   fly secrets set FRONTEND_URL="https://your-domain.com"
+#   fly secrets set FRONTEND_ORIGINS="https://your-domain.com"
+#   fly deploy
+
+app = "extasy-backend"            # rename in `fly launch` if taken
+primary_region = "fra"            # Frankfurt — closest to Balkans
+kill_signal = "SIGINT"
+kill_timeout = 30
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ENVIRONMENT = "production"
+  OCR_ENGINE  = "gemini"          # flip to "tesseract" if you don't set GEMINI_API_KEY
+  UPLOAD_DIR  = "/home/app/storage/uploads"
+  # FRONTEND_URL + FRONTEND_ORIGINS + JWT_SECRET + STRIPE_* + GEMINI_API_KEY
+  # are set via `fly secrets set ...` so they never appear in the repo.
+
+[[mounts]]
+  source      = "extasy_uploads"
+  destination = "/home/app/storage/uploads"
+
+[http_service]
+  internal_port      = 8000
+  force_https        = true
+  auto_stop_machines = "stop"     # scale to zero when idle (free tier-friendly)
+  auto_start_machines = true
+  min_machines_running = 0
+  processes          = ["app"]
+
+[http_service.concurrency]
+  type       = "requests"
+  hard_limit = 100
+  soft_limit = 80
+
+[[http_service.checks]]
+  interval     = "30s"
+  timeout      = "5s"
+  grace_period = "15s"
+  method       = "GET"
+  path         = "/health"
+
+[[vm]]
+  cpu_kind  = "shared"
+  cpus      = 1
+  memory_mb = 512

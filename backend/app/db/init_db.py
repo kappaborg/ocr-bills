@@ -18,30 +18,52 @@ def init_db(db: Session) -> None:
     seed_global_categories_if_missing(db)
 
 
+def _is_sqlite() -> bool:
+    return engine.dialect.name == "sqlite"
+
+
 def _column_exists(db: Session, table: str, column: str) -> bool:
-    rows = db.execute(text(f"PRAGMA table_info({table})")).fetchall()
-    return any(r[1] == column for r in rows)
+    """Portable column-existence check covering SQLite + Postgres."""
+    if _is_sqlite():
+        rows = db.execute(text(f"PRAGMA table_info({table})")).fetchall()
+        return any(r[1] == column for r in rows)
+    # Postgres / others: query information_schema.
+    row = db.execute(
+        text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = :t AND column_name = :c LIMIT 1"
+        ),
+        {"t": table, "c": column},
+    ).fetchone()
+    return row is not None
 
 
 def _apply_lightweight_migrations(db: Session) -> None:
     """
     Add columns to existing tables when the schema has been extended.
     SQLite's CREATE TABLE IF NOT EXISTS won't add columns to a table that
-    already exists, so we ALTER explicitly. Safe to run on every startup.
+    already exists, so we ALTER explicitly. Postgres-safe: SQL is generic ALTER
+    TABLE which both engines accept, and we gate on _column_exists so we don't
+    fail on re-runs.
     """
     if not _column_exists(db, "receipts", "household_id"):
         db.execute(text("ALTER TABLE receipts ADD COLUMN household_id INTEGER"))
     if not _column_exists(db, "receipts", "tax_amount"):
-        db.execute(text("ALTER TABLE receipts ADD COLUMN tax_amount REAL"))
+        # REAL → DOUBLE PRECISION on Postgres; both accept "double precision"
+        # but SQLite also accepts "REAL". Use the SQL-92 spelling here.
+        col_type = "REAL" if _is_sqlite() else "DOUBLE PRECISION"
+        db.execute(text(f"ALTER TABLE receipts ADD COLUMN tax_amount {col_type}"))
     db.commit()
 
 
 def _ensure_fts_index(db: Session) -> None:
     """
-    Drop any prior FTS5 external-content table + triggers — search is now
-    implemented as a SQL LIKE scan in the search endpoint (simple, robust,
-    fast enough for demo / SMB-scale data; FTS5 can be re-introduced later).
+    Drop any leftover SQLite FTS5 external-content artifacts. Search is now a
+    plain SQL ILIKE scan, which is portable across SQLite and Postgres.
+    No-op on Postgres (FTS objects don't exist there).
     """
+    if not _is_sqlite():
+        return
     for stmt in (
         "DROP TRIGGER IF EXISTS receipts_au",
         "DROP TRIGGER IF EXISTS receipts_ad",

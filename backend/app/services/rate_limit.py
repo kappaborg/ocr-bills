@@ -20,6 +20,10 @@ class InMemoryTokenBucket:
     def __init__(self) -> None:
         self._buckets: dict[str, _Bucket] = {}
 
+    def reset(self) -> None:
+        """Clear all buckets — used by the test suite between tests."""
+        self._buckets.clear()
+
     def allow(self, key: str, *, capacity: float, refill_per_sec: float) -> bool:
         now = time.time()
         b = self._buckets.get(key)

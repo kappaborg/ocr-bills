@@ -9,6 +9,7 @@ const links = [
   { href: "/scan", label: "Scan" },
   { href: "/inventory", label: "Inventory" },
   { href: "/need-to-buy", label: "Need to buy" },
+  { href: "/reconcile", label: "Reconcile" },
   { href: "/pricing", label: "Pricing" },
   { href: "/settings", label: "Settings" },
 ];

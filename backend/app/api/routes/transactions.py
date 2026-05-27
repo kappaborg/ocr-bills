@@ -67,41 +67,104 @@ def list_transactions(
     return {"results": results}
 
 
+# Accountant-shaped exports. Each writer takes (writer, row) and emits a CSV row.
+# Receipt purchases are expenses, so amounts are negative in formats that use
+# signed totals (QuickBooks/Xero treat the receipt-importing user as the spender).
+def _row_generic(writer, receipt, item, category):
+    writer.writerow([
+        receipt.receipt_date.strftime("%Y-%m-%d") if receipt.receipt_date else "",
+        receipt.store_name or "",
+        item.item_name,
+        category.name if category else "Uncategorized",
+        f"{item.item_price:.2f}",
+        receipt.currency or "",
+    ])
+
+
+def _row_quickbooks(writer, receipt, item, category):
+    """QuickBooks 3-column bank-statement CSV: Date, Description, Amount (negative = spend)."""
+    date_str = receipt.receipt_date.strftime("%m/%d/%Y") if receipt.receipt_date else ""
+    description = (receipt.store_name or "Receipt") + " — " + item.item_name
+    amount = -abs(float(item.item_price))
+    writer.writerow([date_str, description, f"{amount:.2f}"])
+
+
+def _row_xero(writer, receipt, item, category):
+    """Xero bank-statement CSV: *Date, *Amount, Payee, Description, Reference."""
+    date_str = receipt.receipt_date.strftime("%d/%m/%Y") if receipt.receipt_date else ""
+    amount = -abs(float(item.item_price))
+    writer.writerow([
+        date_str,
+        f"{amount:.2f}",
+        receipt.store_name or "",
+        item.item_name,
+        category.name if category else "Uncategorized",
+    ])
+
+
+_FORMAT_WRITERS = {
+    "generic":    (["date", "merchant", "item", "category", "price", "currency"], _row_generic),
+    "quickbooks": (["Date", "Description", "Amount"],                              _row_quickbooks),
+    "xero":       (["*Date", "*Amount", "Payee", "Description", "Reference"],      _row_xero),
+}
+
+_PREMIUM_FORMATS = {"quickbooks", "xero"}
+
+
 @router.get("/export.csv")
 def export_transactions_csv(
     from_date: Optional[datetime] = Query(default=None),
     to_date: Optional[datetime] = Query(default=None),
     category_id: Optional[int] = Query(default=None),
     store: Optional[str] = Query(default=None),
+    format: str = Query(default="generic", description="generic | quickbooks | xero"),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    """
+    Export confirmed transactions as CSV.
+
+    `format=generic` is free-tier. `quickbooks` and `xero` are Pro+ — they
+    produce import-ready files for those accounting platforms.
+    """
+    fmt = (format or "generic").lower()
+    if fmt not in _FORMAT_WRITERS:
+        raise HTTPException(status_code=400, detail=f"Unknown format '{fmt}'. Valid: {sorted(_FORMAT_WRITERS)}")
+
+    if fmt in _PREMIUM_FORMATS:
+        from app.api.deps import get_user_plan
+        plan = get_user_plan(user, db)
+        if plan == "free":
+            raise HTTPException(
+                status_code=402,
+                detail=f"CSV format '{fmt}' requires the pro plan.",
+                headers={"X-Upgrade-Required": "pro"},
+            )
+
+    header, row_writer = _FORMAT_WRITERS[fmt]
     rows = _build_query(db, user, from_date, to_date, category_id, store).all()
 
     def generate():
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["date", "merchant", "item", "category", "price", "currency"])
+        writer.writerow(header)
         yield buf.getvalue()
 
         for receipt, item, category in rows:
             buf.seek(0)
             buf.truncate(0)
-            date_str = receipt.receipt_date.strftime("%Y-%m-%d") if receipt.receipt_date else ""
-            writer.writerow([
-                date_str,
-                receipt.store_name or "",
-                item.item_name,
-                category.name if category else "Uncategorized",
-                f"{item.item_price:.2f}",
-                receipt.currency or "",
-            ])
+            row_writer(writer, receipt, item, category)
             yield buf.getvalue()
 
+    filename = {
+        "generic":    "transactions.csv",
+        "quickbooks": "transactions_quickbooks.csv",
+        "xero":       "transactions_xero.csv",
+    }[fmt]
     return StreamingResponse(
         generate(),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=transactions.csv"},
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 

@@ -66,7 +66,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [exportLoading, setExportLoading] = useState<null | "csv" | "pdf">(null);
+  const [exportLoading, setExportLoading] = useState<null | "csv" | "csv-qb" | "csv-xero" | "pdf">(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   // ── Settings: display currency + date range, both localStorage-backed
@@ -226,11 +227,14 @@ export default function DashboardPage() {
     }
   };
 
-  const handleExport = async (kind: "csv" | "pdf") => {
+  const handleExport = async (kind: "csv" | "csv-qb" | "csv-xero" | "pdf") => {
     if (!token) return;
     setExportLoading(kind);
+    setExportMenuOpen(false);
     try {
-      if (kind === "csv") await exportTransactionsCsv(token);
+      if (kind === "csv") await exportTransactionsCsv(token, "generic");
+      else if (kind === "csv-qb") await exportTransactionsCsv(token, "quickbooks");
+      else if (kind === "csv-xero") await exportTransactionsCsv(token, "xero");
       else await exportTransactionsPdf(token, { displayCurrency: effectiveDisplayCurrency });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
@@ -309,22 +313,48 @@ export default function DashboardPage() {
           >
             New scan
           </button>
-          <button
-            type="button"
-            disabled={!!exportLoading || transactions.length === 0}
-            onClick={() => handleExport("csv")}
-            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10 disabled:opacity-40"
-          >
-            {exportLoading === "csv" ? "Exporting…" : "Export CSV"}
-          </button>
-          <button
-            type="button"
-            disabled={!!exportLoading || transactions.length === 0}
-            onClick={() => handleExport("pdf")}
-            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10 disabled:opacity-40"
-          >
-            {exportLoading === "pdf" ? "Generating…" : "Export PDF"}
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              disabled={!!exportLoading || transactions.length === 0}
+              onClick={() => setExportMenuOpen((v) => !v)}
+              className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10 disabled:opacity-40"
+            >
+              {exportLoading
+                ? exportLoading === "pdf" ? "Generating…" : "Exporting…"
+                : "Export ▾"}
+            </button>
+            {exportMenuOpen && (
+              <div
+                className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-xl border border-white/10 bg-slate-950/95 shadow-xl backdrop-blur"
+                onMouseLeave={() => setExportMenuOpen(false)}
+              >
+                <ExportMenuItem
+                  label="CSV (generic)"
+                  hint="Plain spreadsheet"
+                  onClick={() => handleExport("csv")}
+                />
+                <ExportMenuItem
+                  label="QuickBooks CSV"
+                  hint="Bank-import format"
+                  premium={billing?.plan === "free"}
+                  onClick={() => handleExport("csv-qb")}
+                />
+                <ExportMenuItem
+                  label="Xero CSV"
+                  hint="Bank-statement format"
+                  premium={billing?.plan === "free"}
+                  onClick={() => handleExport("csv-xero")}
+                />
+                <ExportMenuItem
+                  label="PDF expense report"
+                  hint={`Display currency: ${effectiveDisplayCurrency}`}
+                  premium={billing?.plan === "free"}
+                  onClick={() => handleExport("pdf")}
+                />
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -732,5 +762,36 @@ export default function DashboardPage() {
         </div>
       )}
     </main>
+  );
+}
+
+
+function ExportMenuItem({
+  label,
+  hint,
+  premium = false,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  premium?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left text-sm text-slate-200 hover:bg-white/5"
+    >
+      <span>
+        <span className="block font-medium">{label}</span>
+        <span className="block text-xs text-slate-500">{hint}</span>
+      </span>
+      {premium && (
+        <span className="rounded-full bg-cyan-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-200">
+          Pro
+        </span>
+      )}
+    </button>
   );
 }

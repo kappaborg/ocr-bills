@@ -137,14 +137,23 @@ export async function listTransactions(token: string): Promise<{ results: Transa
   return apiFetch<{ results: TransactionOut[] }>("/transactions", { token });
 }
 
-export async function exportTransactionsCsv(token: string): Promise<void> {
-  const url = `${API_BASE_URL}/transactions/export.csv`;
+export type ExportCsvFormat = "generic" | "quickbooks" | "xero";
+
+export async function exportTransactionsCsv(
+  token: string,
+  format: ExportCsvFormat = "generic",
+): Promise<void> {
+  const url = `${API_BASE_URL}/transactions/export.csv?format=${encodeURIComponent(format)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error("Export failed");
+  if (!res.ok) {
+    let detail = "Export failed";
+    try { detail = (await res.json()).detail ?? detail; } catch { /* ignore */ }
+    throw new Error(detail);
+  }
   const blob = await res.blob();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "transactions.csv";
+  a.download = `transactions_${format}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -315,6 +324,79 @@ export async function createHousehold(name: string, token: string): Promise<Hous
 }
 export async function joinHousehold(inviteToken: string, token: string): Promise<HouseholdOut> {
   return apiFetch<HouseholdOut>("/households/join", { method: "POST", token, jsonBody: { invite_token: inviteToken } });
+}
+
+// ── Reconciliation ─────────────────────────────────────────────────────────
+
+export type ReconcileMatch = {
+  bank_row: number;
+  bank_date: string;
+  bank_merchant: string;
+  bank_amount: number;
+  receipt_id: number;
+  receipt_store: string | null;
+  receipt_total: number;
+  receipt_date: string;
+  score: number;
+};
+export type ReconcileUnmatchedBank = {
+  row: number;
+  date: string;
+  merchant: string;
+  amount: number;
+};
+export type ReconcileUnmatchedReceipt = {
+  receipt_id: number;
+  store_name: string | null;
+  total_amount: number;
+  currency: string | null;
+  receipt_date: string;
+};
+export type ReconcileResult = {
+  matched: ReconcileMatch[];
+  unmatched_bank: ReconcileUnmatchedBank[];
+  unmatched_receipts: ReconcileUnmatchedReceipt[];
+  stats: {
+    bank_rows: number;
+    matched: number;
+    unmatched_bank: number;
+    unmatched_receipts: number;
+    match_rate_pct: number;
+  };
+};
+
+export async function uploadReconcileCsv(
+  file: File,
+  token: string,
+  opts: { amountTolerancePct?: number; dayWindow?: number } = {},
+): Promise<ReconcileResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const params = new URLSearchParams();
+  if (opts.amountTolerancePct != null) params.set("amount_tolerance_pct", String(opts.amountTolerancePct));
+  if (opts.dayWindow != null) params.set("day_window", String(opts.dayWindow));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<ReconcileResult>(`/reconcile/upload${qs}`, { method: "POST", token, formData });
+}
+
+export function reconcileSampleCsvUrl(token: string): string {
+  // The endpoint requires auth — we can't link to it directly, so the page
+  // fetches it via JS. Kept here for completeness.
+  void token;
+  return `${API_BASE_URL}/reconcile/sample.csv`;
+}
+
+export async function downloadReconcileSample(token: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/reconcile/sample.csv`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Could not load sample CSV");
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "bank_sample.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // ── Billing ────────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_plan
@@ -26,6 +27,23 @@ from app.db.models import Receipt, ReceiptStatus
 
 
 router = APIRouter(dependencies=[Depends(require_plan("business"))])
+
+
+@router.get("/sample.csv")
+def sample_csv():
+    """Download a tiny example CSV to show users the expected shape."""
+    sample = (
+        "date,merchant,amount\n"
+        "2026-05-22,Konzum,32.45\n"
+        "2026-05-20,REWE,20.05\n"
+        "2026-05-19,Apoteka MUP,24.40\n"
+        "2026-05-18,PETRO,60.00\n"
+    )
+    return StreamingResponse(
+        iter([sample]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=bank_sample.csv"},
+    )
 
 
 def _parse_amount(s: str) -> Optional[float]:

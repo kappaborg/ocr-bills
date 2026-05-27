@@ -255,6 +255,60 @@ Stripe SDK: `stripe>=15.0`. Endpoints return 503 with a clear message when `STRI
 
 ---
 
+# 2026-05-27 part 2 — Day 3: Accountant exports + Reconciliation UI
+
+The two highest-ROI features for B2B customers shipped on top of the existing CSV/PDF/reconcile backend. Accountants now have plug-and-play imports for QuickBooks and Xero, and Business users have a real UI for matching their bank statements.
+
+## Accountant CSV formats (`/transactions/export.csv?format=...`)
+
+| Format | Shape | Gate |
+|---|---|---|
+| `generic` | `date, merchant, item, category, price, currency` | Free |
+| `quickbooks` | `Date, Description, Amount` — MM/DD/YYYY, signed (-=spend) | Pro |
+| `xero` | `*Date, *Amount, Payee, Description, Reference` — DD/MM/YYYY, signed | Pro |
+
+QuickBooks and Xero formats are designed to import directly into the respective platform's bank-statement importer — no column mapping required.
+
+Implementation: row-emitter table in `routes/transactions.py`. Adding a new format is a 5-line addition to `_FORMAT_WRITERS`.
+
+## Reconciliation UI (`/reconcile`)
+
+New page lets Business users upload a bank CSV and see:
+- Drop-zone (drag/drop or click) with file replace
+- Amount tolerance % + date window controls (defaults 5% / ±2 days)
+- Stat row: bank rows / matched / unmatched bank / match rate %
+- Three result sections: matched (green), bank-charges-without-receipt (amber), receipts-not-in-statement (slate)
+- Sample CSV download button
+
+Non-Business users hit a gated landing card that routes them to `/pricing` instead of seeing the upload UI and getting 402'd.
+
+New endpoint `GET /reconcile/sample.csv` serves a tiny example file users can use as a template.
+
+## Dashboard export menu
+
+Replaced the two Export buttons with a single **Export ▾** dropdown:
+- CSV (generic) — always available
+- QuickBooks CSV — premium badge for free users
+- Xero CSV — premium badge for free users
+- PDF expense report — premium badge for free users (uses current display currency)
+
+`ExportMenuItem` component handles the badge + click-through to the right handler.
+
+## TopNav
+
+Added the **Reconcile** link. Visible to all users; the page itself gates behind the Business plan with an upgrade prompt.
+
+## Smoke test result (free-tier user)
+
+- `format=generic` → 200 with the expected header
+- `format=quickbooks` / `xero` → 402 with `detail: "CSV format '…' requires the pro plan."`
+- `format=banana` → 400 with the valid format list
+- `/reconcile/sample.csv` → 402 (business)
+- `/reconcile/upload` → 402 (business)
+- `/reconcile` page → 200 (renders the upgrade card for free user)
+
+---
+
 ## Known follow-ups
 
 - Live FX endpoint currently shows `source: static-fallback` — frankfurter.app timed out during my smoke test. Worth re-running in production where outbound HTTPS is reliable; the static table is intentionally close to live values so the diff is small.

@@ -210,6 +210,20 @@ class HouseholdMember(Base):
     user = relationship("User", back_populates="household_memberships")
 
 
+class ProcessedStripeEvent(Base):
+    """
+    Dedup table for Stripe webhook delivery. Stripe retries events on 5xx and
+    timeout; without this table a retried `customer.subscription.updated`
+    would re-sync the subscription (mostly idempotent but wasteful) and a
+    retried `checkout.session.completed` would issue a second Stripe API call.
+    """
+    __tablename__ = "processed_stripe_events"
+
+    event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class Plan(str, enum.Enum):
     free = "free"
     pro = "pro"

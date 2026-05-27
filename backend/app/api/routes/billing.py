@@ -25,8 +25,7 @@ from app.api.deps import (
     receipts_in_current_period,
 )
 from app.core.config import settings
-from app.db.init_db import init_db
-from app.db.models import Plan, Subscription, SubscriptionStatus, User
+from app.db.models import Plan, ProcessedStripeEvent, Subscription, SubscriptionStatus, User
 
 
 router = APIRouter()
@@ -131,7 +130,6 @@ def list_plans():
 @router.get("/me")
 def my_billing(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Current plan + quota usage. Drives the dashboard usage bar + settings page."""
-    init_db(db)
     plan = get_user_plan(user, db)
     used = receipts_in_current_period(user, db)
     quota = quota_for_plan(plan)
@@ -163,7 +161,6 @@ def create_checkout(
 ):
     """Create a Stripe Checkout Session for the requested plan. Returns the URL to redirect to."""
     stripe = _require_stripe()
-    init_db(db)
     price_id = _price_for_plan(payload.plan)
 
     sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
@@ -228,10 +225,21 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Webhook signature verification failed: {e}")
 
+    event_id = event["id"] if isinstance(event, dict) else event.id
     event_type = event["type"] if isinstance(event, dict) else event.type
     data = event["data"]["object"] if isinstance(event, dict) else event.data.object
 
-    init_db(db)
+
+    # ── Idempotency guard ──────────────────────────────────────────────────
+    # Stripe retries on 5xx and on timeout; without this check a retried
+    # `customer.subscription.updated` would re-sync state and a retried
+    # `checkout.session.completed` would issue a second Stripe API call.
+    if event_id:
+        seen = db.query(ProcessedStripeEvent).filter(ProcessedStripeEvent.event_id == event_id).first()
+        if seen is not None:
+            return {"received": True, "already_processed": True, "event_id": event_id}
+        db.add(ProcessedStripeEvent(event_id=event_id, event_type=event_type or ""))
+        db.commit()
 
     if event_type in ("customer.subscription.created", "customer.subscription.updated"):
         _sync_subscription_from_stripe(db, data)

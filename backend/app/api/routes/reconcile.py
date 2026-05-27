@@ -22,7 +22,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_plan
-from app.db.init_db import init_db
 from app.db.models import Receipt, ReceiptStatus
 
 
@@ -93,7 +92,6 @@ def reconcile_upload(
     We accept absolute or negative amounts — debits are matched as positive
     receipt totals.
     """
-    init_db(db)
     blob = file.file.read().decode("utf-8", errors="replace")
 
     # Sniff delimiter

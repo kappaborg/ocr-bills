@@ -356,6 +356,65 @@ Mobile parity for the bigger Day 1–3 features (Reconcile, Budgets UI, Recurrin
 
 ---
 
+# 2026-05-27 part 4 — Pre-launch hardening
+
+Skipped the big cosmetic refactor. Instead: added the safety net (tests) and fixed the actually-risky stuff. 25 tests, 3.5s suite, all green.
+
+## Test suite (`backend/tests/`)
+
+`pytest` + `pytest-asyncio` added to `requirements.txt`. Run with:
+
+```bash
+cd backend && venv/bin/python -m pytest tests/ -x --tb=short
+```
+
+`conftest.py` provides per-test isolation:
+- Temp SQLite via `DATABASE_URL` env override
+- Temp `UPLOAD_DIR` per-test
+- Forces `OCR_ENGINE=tesseract` + clears `GEMINI_API_KEY` and `STRIPE_SECRET_KEY` so tests don't pollute on accidentally-configured keys
+- Hot-reloads every module that captures settings/engine at import time so the env vars take effect inside the test
+- `with TestClient(app)` so the lifespan-based `init_db` actually runs
+- Reusable `client`, `user_token`, and `auth_headers` fixtures
+- `rate_limit.live_ocr_limiter.reset()` available (added new method on the bucket)
+
+Coverage areas:
+- **`test_auth.py`** — register → login → /auth/me round-trip; wrong password; missing token; short password; duplicate email
+- **`test_billing.py`** — `/plans` shape, `/me` defaults to free, premium endpoints (PDF/budgets/households/reconcile/QuickBooks-CSV/Xero-CSV) all return 402, generic CSV works, unknown format returns 400, checkout returns 503 when Stripe unconfigured
+- **`test_receipts_and_quota.py`** — quota dep returns 402 on the 21st upload, `/billing/me` reflects usage, categories meta endpoint returns defaults
+- **`test_search.py`** — search by store, by raw text (Japanese), empty query returns empty
+- **`test_webhook.py`** — webhook is 503 when unconfigured, **duplicate event IDs are no-ops** (idempotency)
+
+## Stripe webhook idempotency
+
+New `processed_stripe_events` table (PK `event_id`, plus `event_type`, `created_at`). In `routes/billing.py` the webhook now checks-and-inserts the event ID **before** applying state changes. Retried events return `{"received": true, "already_processed": true}` with 200 OK, never re-running the sync logic.
+
+Why this matters: Stripe retries on any 5xx, timeout, or non-200 response. Without dedup, a retried `customer.subscription.updated` would re-run the Stripe API lookup; a retried `checkout.session.completed` would create a second customer; etc.
+
+## init_db moved to lifespan only
+
+Previously `init_db(db)` ran on **every API request** — `CREATE TABLE IF NOT EXISTS`, FTS-table drops, ALTER TABLE migration checks, default-category seeding. That's a multi-DB-round-trip pre-flight on every call.
+
+Now it runs **once** in the FastAPI lifespan startup (`app/main.py` already had the lifespan hook). All 25 `init_db(db)` calls in route handlers were removed. Unused `from app.db.init_db import init_db` imports cleaned up at the same time (9 files).
+
+Net effect: most endpoints drop ~5 DB queries per request.
+
+## Dead code removal
+
+- `GOOGLE_VISION_API_KEY` setting (and its raise-on-set check, which was already lifted out of `ocr.py` during the engine refactor) — removed from `core/config.py`. The variable was a vestige of an earlier OCR plan that never shipped.
+
+## What I deliberately did NOT do
+
+Listed for transparency so future-me knows why these aren't touched:
+- **Split `dashboard/page.tsx`** (~750 lines) — works, no consumer asking for a sub-component
+- **Move `receipt_parser.py` regexes around** — the regex domain is what it is; "elegant" regex is mostly a myth
+- **Service-layer abstraction in backend** — premature; no second consumer of any service
+- **Type-checker (mypy/pyright) pass** — useful but not a launch blocker
+- **eslint --fix on frontend** — same
+
+These are post-launch concerns. Refactoring without usage data optimizes for hypothetical problems.
+
+---
+
 ## Known follow-ups
 
 - Live FX endpoint currently shows `source: static-fallback` — frankfurter.app timed out during my smoke test. Worth re-running in production where outbound HTTPS is reliable; the static table is intentionally close to live values so the diff is small.

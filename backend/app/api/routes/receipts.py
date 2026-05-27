@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import enforce_quota, get_current_user, get_db
 from app.core.config import settings
-from app.db.init_db import init_db
 from app.db.models import Category, Receipt, ReceiptItem, ReceiptStatus
 from app.schemas.receipts import (
     ReceiptConfirmRequest,
@@ -158,7 +157,6 @@ def upload_receipts(
     user=Depends(get_current_user),
     _quota=Depends(enforce_quota),  # 402 when this period's receipt cap is reached
 ):
-    init_db(db)
 
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -208,7 +206,6 @@ def live_preview_receipt(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    init_db(db)
 
     ip = request.client.host if request.client else "unknown"
     if not live_ocr_limiter.allow(
@@ -267,7 +264,6 @@ def create_receipt_from_frame(
     user=Depends(get_current_user),
     _quota=Depends(enforce_quota),
 ):
-    init_db(db)
 
     if file.size is not None and file.size > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large")
@@ -312,7 +308,6 @@ def search_receipts(
     Multi-token search across receipt raw_text, store_name, and line items.
     Tokens are AND-ed; case-insensitive; matches any token in any field.
     """
-    init_db(db)
     tokens = [t for t in q.split() if t]
     if not tokens:
         return {"results": []}
@@ -388,7 +383,6 @@ def list_receipts(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    init_db(db)
     receipts = (
         db.query(Receipt)
         .options(selectinload(Receipt.items))
@@ -406,7 +400,6 @@ def get_receipt_image(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    init_db(db)
     receipt = db.query(Receipt).filter(Receipt.id == receipt_id, Receipt.user_id == user.id).first()
     if not receipt:
         raise HTTPException(status_code=404, detail="Receipt not found")
@@ -427,7 +420,6 @@ def get_receipt_image(
 
 @router.get("/{receipt_id}", response_model=ReceiptOut)
 def get_receipt(receipt_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
-    init_db(db)
     receipt = _load_receipt(receipt_id, user.id, db)
     return _get_receipt_out(receipt)
 
@@ -438,7 +430,6 @@ def delete_receipt(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    init_db(db)
     receipt = db.query(Receipt).filter(Receipt.id == receipt_id, Receipt.user_id == user.id).first()
     if not receipt:
         raise HTTPException(status_code=404, detail="Receipt not found")
@@ -463,7 +454,6 @@ def confirm_receipt(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    init_db(db)
     receipt = _load_receipt(receipt_id, user.id, db)
 
     categories = db.query(Category).filter(Category.user_id.is_(None)).all()

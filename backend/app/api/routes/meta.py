@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
-from app.db.init_db import init_db
 from app.db.models import InventoryItem, Receipt, ReceiptStatus
 from app.services.inventory_update import update_inventory_for_receipt
 
@@ -16,7 +15,6 @@ router = APIRouter()
 def list_categories(db: Session = Depends(get_db)):
     """Global category list — used by the frontend item editor. No auth required."""
     from app.db.models import Category
-    init_db(db)
     cats = db.query(Category).filter(Category.user_id.is_(None)).order_by(Category.id).all()
     return [{"id": c.id, "name": c.name} for c in cats]
 
@@ -45,7 +43,6 @@ def reindex_inventory(
     Rebuild products and inventory_items from all confirmed receipts.
     Safe to call multiple times — upserts rather than deletes.
     """
-    init_db(db)
 
     # Reset existing inventory counts so rebuild is idempotent.
     existing_inv = db.query(InventoryItem).filter(InventoryItem.user_id == user.id).all()

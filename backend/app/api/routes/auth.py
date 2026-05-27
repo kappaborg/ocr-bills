@@ -3,7 +3,6 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
-from app.db.init_db import init_db
 from app.db.models import User
 from app.services.rate_limit import live_ocr_limiter
 from app.utils.auth import create_access_token, hash_password, verify_password
@@ -36,7 +35,6 @@ class ProfileUpdateRequest(BaseModel):
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
-    init_db(db)
 
     ip = request.client.host if request.client else "unknown"
     if not live_ocr_limiter.allow(f"register:{ip}", capacity=5, refill_per_sec=5 / 60.0):
@@ -66,7 +64,6 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
 
 @router.post("/login")
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    init_db(db)
 
     ip = request.client.host if request.client else "unknown"
     if not live_ocr_limiter.allow(f"login:{ip}", capacity=10, refill_per_sec=10 / 60.0):

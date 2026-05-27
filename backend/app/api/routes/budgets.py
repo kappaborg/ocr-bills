@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_plan
 from app.api.routes.fx import get_rates
-from app.db.init_db import init_db
 from app.db.models import Budget, Category, Receipt, ReceiptItem, ReceiptStatus
 
 
@@ -98,7 +97,6 @@ def _compute_progress(budget: Budget, db: Session, rates: dict[str, float], now:
 
 @router.get("")
 def list_budgets(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    init_db(db)
     rates = get_rates()["rates"]
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     budgets = db.query(Budget).filter(Budget.user_id == user.id).all()
@@ -111,7 +109,6 @@ def upsert_budget(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    init_db(db)
     if payload.monthly_limit <= 0:
         raise HTTPException(status_code=400, detail="monthly_limit must be > 0")
 

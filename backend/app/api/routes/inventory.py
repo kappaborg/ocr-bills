@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
-from app.db.init_db import init_db
 from app.db.models import Category, InventoryItem, Product
 from app.schemas.inventory import InventoryListResponse
 
@@ -14,8 +13,6 @@ router = APIRouter()
 
 @router.get("", response_model=InventoryListResponse)
 def list_inventory(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    init_db(db)
-
     rows = (
         db.query(InventoryItem, Product, Category)
         .join(Product, Product.id == InventoryItem.product_id)

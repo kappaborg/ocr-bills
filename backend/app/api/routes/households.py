@@ -16,7 +16,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_plan
-from app.db.init_db import init_db
 from app.db.models import Household, HouseholdMember, Receipt, User
 
 
@@ -52,7 +51,6 @@ def _household_out(household: Household, members: list[HouseholdMember]) -> dict
 
 @router.get("")
 def list_my_households(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    init_db(db)
     memberships = (
         db.query(HouseholdMember)
         .filter(HouseholdMember.user_id == user.id)
@@ -72,7 +70,6 @@ def create_household(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    init_db(db)
     if not payload.name.strip():
         raise HTTPException(status_code=400, detail="Household name required")
 
@@ -96,7 +93,6 @@ def join_household(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    init_db(db)
     household = db.query(Household).filter(Household.invite_token == payload.invite_token).first()
     if household is None:
         raise HTTPException(status_code=404, detail="Invalid invite token")
@@ -138,7 +134,6 @@ def share_receipt_to_household(
     user=Depends(get_current_user),
 ):
     """Attach an existing receipt to a household so all members can see it."""
-    init_db(db)
     membership = (
         db.query(HouseholdMember)
         .filter(HouseholdMember.household_id == household_id, HouseholdMember.user_id == user.id)
@@ -162,7 +157,6 @@ def list_household_receipts(
     user=Depends(get_current_user),
 ):
     """All receipts shared into this household, regardless of original owner."""
-    init_db(db)
     membership = (
         db.query(HouseholdMember)
         .filter(HouseholdMember.household_id == household_id, HouseholdMember.user_id == user.id)

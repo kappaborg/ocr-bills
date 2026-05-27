@@ -9,8 +9,6 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours — tokens were expiring mid-session
 
-    GOOGLE_VISION_API_KEY: str = ""
-
     # ── OCR engine selection ───────────────────────────────────────────────
     # One of: tesseract (default, free, local) | gemini (free tier 1500/day,
     # highest accuracy) | claude (paid) | mindee (paid, receipt-specialised) |

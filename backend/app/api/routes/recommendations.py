@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, require_plan
 from app.api.routes.fx import get_rates
-from app.db.init_db import init_db
 from app.db.models import Category, InventoryItem, Product, Receipt, ReceiptItem, ReceiptStatus
 from app.schemas.recommendations import NeedToBuyResponse
 
@@ -25,7 +24,6 @@ def need_to_buy(
     - If we have avg_interval_days, predict next expected buy date.
     - Recommend when now is within lead_days of that date (or overdue).
     """
-    init_db(db)
 
     rows = (
         db.query(InventoryItem, Product, Category)
@@ -77,7 +75,6 @@ def recurring(
     For each, compute the average spend per purchase and project a monthly cost
     in the requested display_currency using cached FX rates.
     """
-    init_db(db)
     rates = get_rates()["rates"]
     to_ccy = display_currency.upper()
     to_rate = rates.get(to_ccy)

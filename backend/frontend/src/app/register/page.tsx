@@ -41,7 +41,7 @@ export default function RegisterPage() {
     try {
       const res = await register(email, password);
       setAccessToken(res.access_token);
-      router.replace("/dashboard");
+      router.replace("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Register failed");
     } finally {

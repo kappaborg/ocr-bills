@@ -14,8 +14,19 @@ const links = [
   { href: "/settings", label: "Settings" },
 ];
 
+// Routes that present their own header (landing) or are pre-login flows where
+// the app-shell nav would be confusing. Returning null hides the global nav.
+const STANDALONE_ROUTES = new Set([
+  "/",
+  "/login",
+  "/register",
+  "/onboarding",
+  "/pricing",          // pricing page is a marketing surface even when logged in
+]);
+
 export function TopNav() {
   const pathname = usePathname();
+  if (STANDALONE_ROUTES.has(pathname || "/")) return null;
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">

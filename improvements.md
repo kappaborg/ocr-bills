@@ -309,6 +309,53 @@ Added the **Reconcile** link. Visible to all users; the page itself gates behind
 
 ---
 
+# 2026-05-27 part 3 — Day 4: Landing page, onboarding, mobile parity
+
+The conversion path is now end-to-end: marketing → register → guided setup → dashboard. Mobile users see their plan/quota too.
+
+## Landing page (`/`)
+
+Full rewrite of the previous bare-bones placeholder:
+- Sticky minimal header (just logo + Pricing + Sign in / Open dashboard)
+- Hero with the bilingual hook (multilingual receipts) and a "Try it free" CTA
+- Six-feature grid (OCR engines, multi-currency, budgets+recurring, reconciliation, accountant exports, household sharing)
+- Live pricing teaser that pulls from `/billing/plans` so prices stay in sync with the backend
+- Bottom CTA + footer
+
+For unauthenticated visitors the page is standalone (TopNav hidden); authenticated users see "Open dashboard" CTAs instead of "Try it free".
+
+## TopNav route filtering
+
+`STANDALONE_ROUTES` constant in `components/TopNav.tsx` — the global nav now hides on `/`, `/login`, `/register`, `/onboarding`, and `/pricing` so those surfaces present their own header / no header at all. Cleaner first impression, no nav-bar fighting with the marketing layout.
+
+## Onboarding wizard (`/onboarding`)
+
+Three steps, all skippable:
+1. **Currency** — pick display currency from the supported list, written to `localStorage` so the dashboard picks it up immediately
+2. **Scan options** — two cards (Upload photo / Use camera) explaining the flow
+3. **Recap** — confirms the picked currency, calls out the free-tier quota, surfaces four "what to do next" cards
+
+Register flow now redirects to `/onboarding` instead of `/dashboard`. The "Skip for now" button lets users bypass straight to the dashboard.
+
+## Mobile (Flutter)
+
+- New `features/billing/` feature: `BillingMe` + `BillingUsage` models, `BillingRepository` with a `FutureProvider<BillingMe>` (`billingMeProvider`).
+- `Endpoints` extended with the 4 billing routes.
+- `DashboardScreen` now renders a plan chip at the top: plan badge (FREE/PRO/BUSINESS), usage counter ("X / Y receipts this month" or "Unlimited"), and an Upgrade button for free users that routes to `/settings` (Stripe portal flow there is next).
+
+Mobile parity for the bigger Day 1–3 features (Reconcile, Budgets UI, Recurring page, PDF export, accountant CSVs, FX selector) is intentionally deferred — the backend supports them all, the mobile screens for each are a separate batch best done after first paying customers validate which features they actually want on phone.
+
+## Smoke test results
+
+- `/` 200, hero copy + ExTaSy brand present
+- `/onboarding` 200
+- `/pricing` 200 (still wired)
+- `/dashboard` 200 (still SSRs the skeleton)
+- `/reconcile` 200 (still gated)
+- No Next.js compile errors
+
+---
+
 ## Known follow-ups
 
 - Live FX endpoint currently shows `source: static-fallback` — frankfurter.app timed out during my smoke test. Worth re-running in production where outbound HTTPS is reliable; the static table is intentionally close to live values so the diff is small.

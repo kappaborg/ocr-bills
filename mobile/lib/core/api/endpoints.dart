@@ -27,5 +27,11 @@ class Endpoints {
   static const categories = '/meta/categories';
   static const ocrMeta = '/meta/ocr';
 
+  // Billing
+  static const billingPlans = '/billing/plans';
+  static const billingMe = '/billing/me';
+  static const billingCheckout = '/billing/checkout';
+  static const billingPortal = '/billing/portal';
+
   static const health = '/health';
 }

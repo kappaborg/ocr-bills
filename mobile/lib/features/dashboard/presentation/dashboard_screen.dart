@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/loading_skeleton.dart';
 import '../../../shared/widgets/receipt_card.dart';
+import '../../billing/data/billing_repository.dart';
 import '../../receipts/providers/receipts_provider.dart';
 import '../providers/dashboard_provider.dart';
 import 'widgets/spending_chart.dart';
@@ -17,6 +18,7 @@ class DashboardScreen extends ConsumerWidget {
     final insightsAsync = ref.watch(insightsProvider);
     final spendingAsync = ref.watch(spendingByCategoryProvider);
     final receiptsAsync = ref.watch(receiptsListProvider);
+    final billingAsync = ref.watch(billingMeProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -31,6 +33,7 @@ class DashboardScreen extends ConsumerWidget {
           ref.invalidate(insightsProvider);
           ref.invalidate(spendingByCategoryProvider);
           ref.invalidate(transactionsProvider);
+          ref.invalidate(billingMeProvider);
           await ref.read(receiptsListProvider.notifier).load();
         },
         child: SingleChildScrollView(
@@ -39,6 +42,61 @@ class DashboardScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Plan + quota chip
+              billingAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (b) {
+                  final color = b.plan == 'free'
+                      ? theme.colorScheme.surfaceContainerHighest
+                      : b.plan == 'pro'
+                          ? theme.colorScheme.primary.withOpacity(0.15)
+                          : theme.colorScheme.tertiary.withOpacity(0.15);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.onSurface.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              b.plan.toUpperCase(),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              b.isUnlimited
+                                  ? 'Unlimited receipts'
+                                  : '${b.usage.receiptsUsed} / ${b.usage.receiptsQuota} receipts this month',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                          if (b.plan == 'free')
+                            TextButton(
+                              onPressed: () => context.push('/settings'),
+                              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                              child: const Text('Upgrade'),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
               // Summary card
               receiptsAsync.when(
                 loading: () => const LoadingSkeleton(height: 100),

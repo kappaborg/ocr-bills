@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import enforce_quota, get_current_user, get_db
 from app.core.config import settings
 from app.db.init_db import init_db
 from app.db.models import Category, Receipt, ReceiptItem, ReceiptStatus
@@ -156,6 +156,7 @@ def upload_receipts(
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
+    _quota=Depends(enforce_quota),  # 402 when this period's receipt cap is reached
 ):
     init_db(db)
 
@@ -264,6 +265,7 @@ def create_receipt_from_frame(
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
+    _quota=Depends(enforce_quota),
 ):
     init_db(db)
 

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_plan
 from app.api.routes.fx import get_rates
 from app.db.init_db import init_db
 from app.db.models import Category, InventoryItem, Product, Receipt, ReceiptItem, ReceiptStatus
@@ -65,7 +65,7 @@ def need_to_buy(
     return {"results": results[:200]}
 
 
-@router.get("/recurring")
+@router.get("/recurring", dependencies=[Depends(require_plan("pro"))])
 def recurring(
     display_currency: str = Query(default="BAM", min_length=3, max_length=4),
     db: Session = Depends(get_db),

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_plan
 from app.api.routes.fx import get_rates
 from app.db.models import Category, Receipt, ReceiptItem, ReceiptStatus
 from app.schemas.transactions import TransactionOut, TransactionsListResponse
@@ -105,7 +105,7 @@ def export_transactions_csv(
     )
 
 
-@router.get("/export.pdf")
+@router.get("/export.pdf", dependencies=[Depends(require_plan("pro"))])
 def export_transactions_pdf(
     from_date: Optional[datetime] = Query(default=None),
     to_date: Optional[datetime] = Query(default=None),

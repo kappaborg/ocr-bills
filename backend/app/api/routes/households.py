@@ -15,12 +15,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_plan
 from app.db.init_db import init_db
 from app.db.models import Household, HouseholdMember, Receipt, User
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_plan("business"))])
 
 
 class HouseholdIn(BaseModel):

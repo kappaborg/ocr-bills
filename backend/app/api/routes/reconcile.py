@@ -20,12 +20,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, require_plan
 from app.db.init_db import init_db
 from app.db.models import Receipt, ReceiptStatus
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_plan("business"))])
 
 
 def _parse_amount(s: str) -> Optional[float]:

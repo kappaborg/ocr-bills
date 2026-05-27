@@ -45,6 +45,7 @@ class User(Base):
     inventory_items = relationship("InventoryItem", back_populates="user")
     budgets = relationship("Budget", back_populates="user")
     household_memberships = relationship("HouseholdMember", back_populates="user")
+    subscription = relationship("Subscription", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
 class ReceiptStatus(str, enum.Enum):
@@ -207,6 +208,44 @@ class HouseholdMember(Base):
 
     household = relationship("Household", back_populates="members")
     user = relationship("User", back_populates="household_memberships")
+
+
+class Plan(str, enum.Enum):
+    free = "free"
+    pro = "pro"
+    business = "business"
+
+
+class SubscriptionStatus(str, enum.Enum):
+    active = "active"           # paid, in good standing
+    trialing = "trialing"       # in trial period
+    past_due = "past_due"       # Stripe failed to charge, grace period
+    canceled = "canceled"       # ended; user reverts to free
+    incomplete = "incomplete"   # checkout abandoned mid-flow
+
+
+class Subscription(Base):
+    """One row per user, tracking their active billing plan."""
+
+    __tablename__ = "subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), unique=True, index=True)
+
+    plan: Mapped[str] = mapped_column(String(16), default=Plan.free.value)
+    status: Mapped[str] = mapped_column(String(24), default=SubscriptionStatus.active.value)
+
+    # Stripe references — null for the implicit free tier
+    stripe_customer_id: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    stripe_subscription_id: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+
+    # End of the current paid period — used to compute the quota window
+    current_period_end: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    user = relationship("User", back_populates="subscription")
 
 
 class InsightType(str, enum.Enum):

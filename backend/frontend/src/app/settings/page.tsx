@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
-import { getMe, updateProfile } from "@/lib/api";
+import { getMe, getMyBilling, openCustomerPortal, updateProfile, type BillingMe } from "@/lib/api";
 
 function passwordStrength(pw: string): { level: 0 | 1 | 2; label: string; color: string } {
   if (pw.length < 8) return { level: 0, label: "Weak", color: "bg-red-500" };
@@ -19,6 +19,8 @@ export default function SettingsPage() {
   const token = getAccessToken();
 
   const [email, setEmail] = useState("");
+  const [billing, setBilling] = useState<BillingMe | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -29,7 +31,21 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!token) { router.replace("/login"); return; }
     getMe(token).then((me) => setEmail(me.email)).catch(() => {});
+    getMyBilling(token).then(setBilling).catch(() => {});
   }, [token, router]);
+
+  const handleManageBilling = async () => {
+    if (!token) return;
+    setPortalLoading(true);
+    try {
+      const r = await openCustomerPortal(token);
+      window.location.href = r.portal_url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open billing portal");
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   const strength = passwordStrength(newPw);
 
@@ -77,6 +93,68 @@ export default function SettingsPage() {
             <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Email</p>
             <p className="mt-1 text-sm text-slate-200">{email || "—"}</p>
           </div>
+        </section>
+
+        {/* Subscription */}
+        <section className="glass-panel p-6">
+          <h2 className="text-base font-semibold text-slate-50">Subscription</h2>
+          {billing ? (
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-slate-500">Current plan</p>
+                  <p className="mt-1 text-sm font-medium text-slate-100">
+                    <span className={
+                      billing.plan === "free" ? "text-slate-300"
+                        : billing.plan === "pro" ? "text-cyan-300" : "text-emerald-300"
+                    }>
+                      {billing.plan.toUpperCase()}
+                    </span>
+                    {billing.status !== "active" && (
+                      <span className="ml-2 text-xs text-amber-300">({billing.status})</span>
+                    )}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs uppercase tracking-wider text-slate-500">This month</p>
+                  <p className="mt-1 text-sm font-mono tabular-nums text-slate-100">
+                    {billing.usage.receipts_quota === 0
+                      ? `${billing.usage.receipts_used} (unlimited)`
+                      : `${billing.usage.receipts_used} / ${billing.usage.receipts_quota}`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                {billing.plan === "free" ? (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/pricing")}
+                    className="rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:brightness-110"
+                  >
+                    Upgrade
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={portalLoading}
+                    onClick={handleManageBilling}
+                    className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10 disabled:opacity-50"
+                  >
+                    {portalLoading ? "Opening…" : "Manage billing"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => router.push("/pricing")}
+                  className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10"
+                >
+                  See plans
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500">Loading…</p>
+          )}
         </section>
 
         {/* Change password */}

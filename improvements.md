@@ -190,6 +190,71 @@ Wire this as a `HybridEngine` in `ocr_engines/hybrid.py` when ready.
 
 ---
 
+# 2026-05-27 — Billing + tier gating
+
+Foundation for selling the product. Free / Pro / Business plans wired into Stripe Checkout with quota enforcement on the backend and an upgrade flow on the frontend.
+
+## Pricing tiers (override via env)
+
+| Plan | $/mo | Receipts/month | Premium features unlocked |
+|---|---|---|---|
+| Free | 0 | 20 | upload, dashboard, CSV, search |
+| Pro | 4.99 | 500 | + PDF export, budgets, recurring detection, price-change insights, FX selector |
+| Business | 19.99 | unlimited | + household sharing, bank reconciliation, priority Gemini OCR |
+
+All quotas/prices live in `app/core/config.py` and can be overridden per deployment via env (`QUOTA_FREE_RECEIPTS_PER_MONTH`, `PRICE_PRO_CENTS`, etc.).
+
+## Backend
+
+- `app/db/models.py` — new `Subscription` table (one per user) + `Plan` and `SubscriptionStatus` enums.
+- `app/api/deps.py` — `get_user_plan(user, db)`, `require_plan(min_plan)` dependency factory, `enforce_quota` dependency. 402 with `X-Upgrade-Required` header guides the client to the right plan.
+- `app/api/routes/billing.py` — new module with:
+  - `GET /billing/plans` — public, drives the pricing page
+  - `GET /billing/me` — current plan + usage, drives the dashboard quota bar
+  - `POST /billing/checkout` — creates a Stripe Checkout Session and returns the URL
+  - `POST /billing/portal` — Stripe-hosted self-service portal (change plan, cancel, update card)
+  - `POST /billing/webhook` — handles `subscription.created/updated/deleted` and `checkout.session.completed`. Signature-verified when `STRIPE_WEBHOOK_SECRET` is set.
+
+Endpoint gating:
+- `POST /receipts/upload`, `POST /receipts/from-frame` — `enforce_quota` (402 when at cap)
+- `GET /transactions/export.pdf`, `GET /recommendations/recurring`, `* /budgets/*` — `require_plan("pro")`
+- `* /households/*`, `* /reconcile/*` — `require_plan("business")`
+
+Stripe SDK: `stripe>=15.0`. Endpoints return 503 with a clear message when `STRIPE_SECRET_KEY` is unset, so dev environments still boot cleanly.
+
+## Frontend
+
+- New `app/pricing/page.tsx` — three-card pricing layout with feature matrix and "Subscribe" buttons that hit Checkout. Featured "Pro" card with gradient ring + "Most popular" badge.
+- New `app/billing/success/page.tsx` — post-Checkout confirmation with links back to the dashboard.
+- `app/dashboard/page.tsx` — plan badge + quota bar at the top. Free users see an "Upgrade" pill; near-limit users see an amber bar; over-limit goes red. Premium-only endpoints (budgets, recurring) silently degrade to empty arrays on free-tier 402 so the dashboard still renders.
+- `app/settings/page.tsx` — new "Subscription" section showing the current plan, period usage, and an "Upgrade" or "Manage billing" button. Manage Billing redirects to the Stripe-hosted portal.
+- `components/TopNav.tsx` — Pricing link added.
+- `lib/api.ts` — `listPlans`, `getMyBilling`, `startCheckout`, `openCustomerPortal`.
+
+## Switching billing on for production
+
+1. Create products + monthly recurring prices in Stripe (one for Pro, one for Business)
+2. In `backend/.env`:
+   ```
+   STRIPE_SECRET_KEY="sk_live_…"
+   STRIPE_WEBHOOK_SECRET="whsec_…"
+   STRIPE_PRICE_PRO="price_…"
+   STRIPE_PRICE_BUSINESS="price_…"
+   FRONTEND_URL="https://your-domain.com"
+   ```
+3. Configure webhook in Stripe dashboard → endpoint `https://your-domain.com/billing/webhook`, events: `customer.subscription.{created,updated,deleted}`, `checkout.session.completed`
+4. Restart backend. `/billing/plans?configured=true` will flip; pricing page goes live.
+
+## Smoke test result (free-tier user)
+
+- `/billing/plans` returns three plans
+- `/billing/me` reports `plan=free, used=0/20`
+- `/transactions/export.pdf`, `/budgets`, `/households`, `/reconcile/upload` all return 402
+- `/receipts` and other free-tier endpoints return 200
+- `/billing/checkout` returns 503 with the setup instruction (no Stripe key yet)
+
+---
+
 ## Known follow-ups
 
 - Live FX endpoint currently shows `source: static-fallback` — frankfurter.app timed out during my smoke test. Worth re-running in production where outbound HTTPS is reliable; the static table is intentionally close to live values so the diff is small.

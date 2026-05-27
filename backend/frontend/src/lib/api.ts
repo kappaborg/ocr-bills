@@ -316,3 +316,47 @@ export async function createHousehold(name: string, token: string): Promise<Hous
 export async function joinHousehold(inviteToken: string, token: string): Promise<HouseholdOut> {
   return apiFetch<HouseholdOut>("/households/join", { method: "POST", token, jsonBody: { invite_token: inviteToken } });
 }
+
+// ── Billing ────────────────────────────────────────────────────────────────
+
+export type PlanInfo = {
+  id: "free" | "pro" | "business";
+  name: string;
+  price_cents: number;
+  receipts_per_month: number | null;
+  features: string[];
+};
+export type PlansResponse = {
+  currency: string;
+  plans: PlanInfo[];
+  configured: boolean;
+};
+export async function listPlans(): Promise<PlansResponse> {
+  return apiFetch<PlansResponse>("/billing/plans", {});
+}
+
+export type BillingMe = {
+  plan: "free" | "pro" | "business";
+  status: string;
+  current_period_end: string | null;
+  usage: {
+    receipts_used: number;
+    receipts_quota: number;       // 0 = unlimited
+    percent: number;
+  };
+};
+export async function getMyBilling(token: string): Promise<BillingMe> {
+  return apiFetch<BillingMe>("/billing/me", { token });
+}
+
+export async function startCheckout(plan: "pro" | "business", token: string): Promise<{ checkout_url: string }> {
+  return apiFetch<{ checkout_url: string }>("/billing/checkout", {
+    method: "POST",
+    token,
+    jsonBody: { plan },
+  });
+}
+
+export async function openCustomerPortal(token: string): Promise<{ portal_url: string }> {
+  return apiFetch<{ portal_url: string }>("/billing/portal", { method: "POST", token });
+}

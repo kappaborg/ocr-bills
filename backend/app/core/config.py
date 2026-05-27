@@ -34,6 +34,29 @@ class Settings(BaseSettings):
     # Comma-separated. Browsers treat localhost vs 127.0.0.1 as different origins — allow both for dev.
     FRONTEND_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    # ── Billing (Stripe) ───────────────────────────────────────────────────
+    # Leave empty in dev — endpoints return 503 until configured. In production:
+    # 1. Create products + recurring prices in Stripe dashboard
+    # 2. Set STRIPE_SECRET_KEY (sk_test_… or sk_live_…)
+    # 3. Set STRIPE_WEBHOOK_SECRET (from `stripe listen` or the webhook UI)
+    # 4. Paste the recurring price IDs into STRIPE_PRICE_PRO / STRIPE_PRICE_BUSINESS
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_PRO: str = ""
+    STRIPE_PRICE_BUSINESS: str = ""
+
+    # Tier quotas (override per deployment if your pricing changes)
+    QUOTA_FREE_RECEIPTS_PER_MONTH: int = 20
+    QUOTA_PRO_RECEIPTS_PER_MONTH: int = 500
+    QUOTA_BUSINESS_RECEIPTS_PER_MONTH: int = 0  # 0 = unlimited
+
+    # Pricing display (cents). Single source of truth — frontend pulls via /billing/plans.
+    PRICE_PRO_CENTS: int = 499
+    PRICE_BUSINESS_CENTS: int = 1999
+
+    # Frontend URL for Stripe Checkout redirects
+    FRONTEND_URL: str = "http://localhost:3737"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

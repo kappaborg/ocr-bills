@@ -8,6 +8,7 @@ import {
   exportTransactionsCsv,
   exportTransactionsPdf,
   getFxRates,
+  getMyBilling,
   listBudgets,
   listInsights,
   listReceipts,
@@ -15,6 +16,7 @@ import {
   listTransactions,
   searchReceipts,
   upsertBudget,
+  type BillingMe,
   type BudgetOut,
   type RecurringItem,
 } from "@/lib/api";
@@ -59,6 +61,7 @@ export default function DashboardPage() {
   const [recurring, setRecurring] = useState<RecurringItem[]>([]);
   const [recurringForecast, setRecurringForecast] = useState(0);
   const [receipts, setReceipts] = useState<ReceiptOut[]>([]);
+  const [billing, setBilling] = useState<BillingMe | null>(null);
   const [searchResults, setSearchResults] = useState<ReceiptOut[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,18 +100,20 @@ export default function DashboardPage() {
     Promise.all([
       listTransactions(token),
       listInsights(token),
-      listBudgets(token),
-      listRecurring(token, displayCurrency ?? "BAM"),
+      listBudgets(token).catch(() => ({ results: [] })),   // pro+ only
+      listRecurring(token, displayCurrency ?? "BAM").catch(() => ({ results: [], forecast_monthly_total: 0, currency: "BAM" })),
       listReceipts(token),
       getFxRates().catch(() => null),
+      getMyBilling(token).catch(() => null),
     ])
-      .then(([tx, ins, bud, rec, rec_full, fx]) => {
+      .then(([tx, ins, bud, rec, rec_full, fx, bill]) => {
         setTransactions(tx.results);
         setInsights(ins.results);
         setBudgets(bud.results);
         setRecurring(rec.results);
         setRecurringForecast(rec.forecast_monthly_total);
         setReceipts(rec_full);
+        setBilling(bill);
         if (fx) setFxRates(fx.rates);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
@@ -332,6 +337,55 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* Plan + quota bar */}
+      {billing && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
+                billing.plan === "free"
+                  ? "bg-slate-700/60 text-slate-300"
+                  : billing.plan === "pro"
+                    ? "bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40"
+                    : "bg-emerald-500/20 text-emerald-200 ring-1 ring-emerald-500/40"
+              }`}
+            >
+              {billing.plan}
+            </span>
+            {billing.usage.receipts_quota === 0 ? (
+              <span className="text-xs text-slate-400">Unlimited receipts</span>
+            ) : (
+              <span className="text-xs text-slate-400">
+                {billing.usage.receipts_used} / {billing.usage.receipts_quota} receipts this month
+              </span>
+            )}
+          </div>
+          {billing.plan === "free" ? (
+            <button
+              type="button"
+              onClick={() => router.push("/pricing")}
+              className="rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500 px-3 py-1 text-xs font-semibold text-slate-950 hover:brightness-110"
+            >
+              Upgrade
+            </button>
+          ) : null}
+        </div>
+      )}
+      {billing && billing.usage.receipts_quota > 0 && (
+        <div className="mb-6 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+          <div
+            className={`h-full transition-all ${
+              billing.usage.percent >= 100
+                ? "bg-red-500"
+                : billing.usage.percent >= 80
+                  ? "bg-amber-400"
+                  : "bg-cyan-400"
+            }`}
+            style={{ width: `${Math.min(100, billing.usage.percent)}%` }}
+          />
+        </div>
+      )}
 
       {/* Date range chips */}
       <div className="mb-6 flex flex-wrap items-center gap-2">

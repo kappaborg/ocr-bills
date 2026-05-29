@@ -173,7 +173,11 @@ def upload_receipts(
             )
 
         receipt_code = uuid.uuid4().hex
-        storage_key = f"{user.id}/{receipt_code}/{uf.filename}"
+        # Sanitize the client-supplied filename — strip any path components
+        # and reject anything that's not a safe character. Prevents traversal
+        # via filenames like "../../etc/shadow.jpg".
+        safe_name = re.sub(r"[^\w.\-]+", "_", os.path.basename(uf.filename or "receipt.jpg"))
+        storage_key = f"{user.id}/{receipt_code}/{safe_name}"
 
         receipt = Receipt(
             user_id=user.id,

@@ -10,7 +10,16 @@ type ScanState = "idle" | "scanning" | "detected" | "no-text";
 
 export default function ScanPage() {
   const router = useRouter();
-  const token = getAccessToken();
+  // Defer the auth-token read until after mount — getAccessToken() touches
+  // localStorage and would mismatch the SSR shell otherwise. Same pattern as
+  // /dashboard.
+  const [token, setToken] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setToken(getAccessToken());
+    setMounted(true);
+  }, []);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -26,6 +35,7 @@ export default function ScanPage() {
 
   // Start camera stream.
   useEffect(() => {
+    if (!mounted) return;            // wait for first-mount token read
     if (!token) {
       router.replace("/login");
       return;
@@ -65,7 +75,7 @@ export default function ScanPage() {
       stream?.getTracks().forEach((t) => t.stop());
       setIsStreaming(false);
     };
-  }, [router, token]);
+  }, [router, token, mounted]);
 
   // OCR polling loop — dep array intentionally excludes isSending (we use a ref).
   useEffect(() => {

@@ -177,11 +177,19 @@ def extract_tax_amount(text: str) -> Optional[float]:
     """
     Detect the PDV/VAT amount paid on a receipt. Returns the largest plausible
     match (handles split rates like '17% PDV: 6.20 + 5% PDV: 0.50').
+
+    Pre-normalizes whitespace + non-ASCII numerals so OCR variants like
+    "PDV  17%   8.37" or Arabic-Indic digits still match.
     """
     if not text:
         return None
+    # Collapse runs of whitespace (incl. non-breaking spaces) and translate
+    # any non-ASCII numerals to ASCII so the regex below stays simple.
+    normalized = text.translate(_NUMERAL_TABLE)
+    normalized = re.sub(r"[ \t ]+", " ", normalized)
+
     best: Optional[float] = None
-    for m in _TAX_AMOUNT_RE.finditer(text):
+    for m in _TAX_AMOUNT_RE.finditer(normalized):
         s = m.group("amount").replace(",", ".")
         try:
             value = float(s)

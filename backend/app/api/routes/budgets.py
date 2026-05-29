@@ -113,7 +113,15 @@ def upsert_budget(
         raise HTTPException(status_code=400, detail="monthly_limit must be > 0")
 
     if payload.category_id is not None:
-        cat = db.query(Category).filter(Category.id == payload.category_id).first()
+        # Categories are either global (user_id IS NULL) or owned by a user.
+        # Reject attempts to pin a budget to another user's private category.
+        from sqlalchemy import or_
+        cat = (
+            db.query(Category)
+            .filter(Category.id == payload.category_id)
+            .filter(or_(Category.user_id.is_(None), Category.user_id == user.id))
+            .first()
+        )
         if cat is None:
             raise HTTPException(status_code=404, detail="Category not found")
 

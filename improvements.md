@@ -458,6 +458,39 @@ Plus cost estimate (≈$1–4/mo fixed before subscribers) and a "common pitfall
 
 ---
 
+# 2026-05-29 — Pre-Vercel audit
+
+Three parallel agent audits (OCR/parser/categorization, frontend UX/responsive/SSR, backend routes/security/perf) plus a live endpoint sweep. Triaged into S1 (blocker), S2 (looks amateur), S3 (acceptable for v1). All S1 + the highest-value S2 fixes shipped here. 25/25 tests still green.
+
+## S1 blockers — FIXED
+
+1. **Webhook unsigned-body fallback was prod-reachable** (`billing.py`). If `STRIPE_WEBHOOK_SECRET` were unset in production, anyone could POST a fake `customer.subscription.updated` and flip arbitrary users to Business plan. Now the unsigned fallback is gated by `ENVIRONMENT == "local"` — any other value (e.g. `"production"` from `fly.toml`) makes the endpoint return 503 until the secret is configured.
+2. **Budget cross-tenant category bind** (`budgets.py`). `POST /budgets` checked if a category existed but not whether the caller could see it. A user could attach their budget to another user's private category, which then influenced the spent/projected math. Now the query joins on `Category.user_id IS NULL OR Category.user_id == current_user.id`.
+3. **Gemini engine crashed the whole upload on one bad item** (`ocr_engines/gemini.py`). The list-comp called `float(it.get("item_price") or 0.0)` before the filter ran, so a single Gemini response with `item_price: "12.3A"` would `ValueError` and 500 the upload. Replaced with a defensive per-item loop that skips malformed entries (also drops items with `item_price <= 0` so empty Gemini items don't sneak through as junk).
+4. **File-path traversal via upload filename** (`receipts.py`). `storage_key = f"{user.id}/{code}/{uf.filename}"` used the raw client-supplied filename. A filename like `../../../etc/something.jpg` was a real traversal vector. Now `os.path.basename()` + a `[^\w.-]+` strip happens before composing the key.
+5. **Scan page read auth-token at top level** (`scan/page.tsx`). Same SSR-localStorage mismatch we fixed on `/dashboard`. Moved the read into a `useEffect` with a `mounted` flag and added `mounted` to the camera-effect's dep array.
+
+## S2 fixes shipped
+
+6. **Dashboard search input overflowed on mobile** — `w-64` (256 px) is wider than a phone's content column. Switched to `w-full sm:w-64` with a `w-full sm:w-auto` parent wrapper so it stacks below the heading on phones and right-aligns on `sm+`.
+7. **`/reconcile` flashed the upload UI to free users**. Page now blocks on `billing === null` with a small skeleton until the plan is known, then either shows the gated-card or the upload form. No more momentary "you have access" before the gate kicks in.
+8. **`extract_tax_amount` missed double-spaced OCR output**. "PDV  17%   8.37" wouldn't match the regex because the pattern assumed single spaces. Pre-normalizes runs of whitespace and translates non-ASCII numerals (Arabic-Indic, Devanagari, etc.) before the regex.
+
+## S2 noted but deferred to v1.1
+
+- **N+1 queries** in `list_my_households` and `list_budgets` — measurable only over ~100 households / ~30 budgets. Real users will hit this in v1.1 (~weeks away).
+- **Rate limiter is in-memory** — only matters when we scale beyond 1 worker. `fly.toml` uses 1 machine and 1 worker; documented as a Redis-upgrade path in DEPLOY.md.
+- **Currency detection edge case**: when langdetect mis-guesses "en" on a Latin-only Bosnian receipt with no KM marker and <10 Cyrillic chars, the lang map returns USD instead of BAM. Hard to fix without weakening other locales (would mis-currency Russian receipts).
+- **Live-preview file-size validation** — `MAX_UPLOAD_BYTES` covers the main upload path; live-preview has the same check. Real protection is FastAPI's request body limit at deployment layer (Fly.io defaults to 1 MB; we bump to 10 MB via environment).
+
+## Audit results not turned into fixes (false positives or accepted)
+
+- "Households endpoint exposes other users' emails" — the agent's read was wrong. The endpoint only returns memberships of households the caller is in, where the caller is by definition a member and should see who else is in the group.
+- Loading spinner vs skeleton inconsistency on `/inventory` and `/need-to-buy` — cosmetic, kept for v1.
+- Receipt detail image lazy-loading without placeholder — cosmetic.
+
+---
+
 ## Known follow-ups
 
 - Live FX endpoint currently shows `source: static-fallback` — frankfurter.app timed out during my smoke test. Worth re-running in production where outbound HTTPS is reliable; the static table is intentionally close to live values so the diff is small.

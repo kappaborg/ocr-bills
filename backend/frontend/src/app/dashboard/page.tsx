@@ -633,13 +633,13 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-slate-50">Transactions</h2>
               {transactions.length > 0 && (
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                   <input
                     type="search"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search items, stores, raw text…"
-                    className="w-64 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+                    className="w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 sm:w-64"
                   />
                   {search && (
                     <button

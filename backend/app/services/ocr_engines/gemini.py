@@ -156,16 +156,31 @@ class GeminiEngine(OCREngine):
             raise RuntimeError("Gemini returned empty raw_text.")
 
         items_in = data.get("items") or []
-        items = [
-            StructuredItem(
-                item_name=str(it.get("item_name", "")).strip(),
-                quantity=it.get("quantity"),
-                unit_price=it.get("unit_price"),
-                item_price=float(it.get("item_price") or 0.0),
-            )
-            for it in items_in
-            if it.get("item_name") and (it.get("item_price") is not None)
-        ]
+        items: list[StructuredItem] = []
+        for it in items_in:
+            name = str(it.get("item_name", "")).strip()
+            if not name:
+                continue
+            # Be defensive: Gemini occasionally returns "12.3A" or other
+            # non-numeric strings for amounts. Skip rather than crash the
+            # whole upload, which would block a paying user.
+            try:
+                price = float(it.get("item_price") or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if price <= 0:
+                continue
+            try:
+                qty = float(it["quantity"]) if it.get("quantity") is not None else None
+            except (TypeError, ValueError):
+                qty = None
+            try:
+                unit = float(it["unit_price"]) if it.get("unit_price") is not None else None
+            except (TypeError, ValueError):
+                unit = None
+            items.append(StructuredItem(
+                item_name=name, quantity=qty, unit_price=unit, item_price=price,
+            ))
 
         structured = StructuredReceipt(
             store_name=(data.get("store_name") or None),

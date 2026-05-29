@@ -219,9 +219,19 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         if settings.STRIPE_WEBHOOK_SECRET:
             event = stripe.Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
         else:
-            # Dev-mode shortcut: trust the body. NEVER use in production.
+            # Unsigned-body fallback exists only for local dev runs. In any
+            # non-local ENVIRONMENT (e.g. "production" set by fly.toml) the
+            # webhook MUST be signature-verified — otherwise anyone hitting
+            # /billing/webhook could flip arbitrary users to Business plans.
+            if (settings.ENVIRONMENT or "").lower() != "local":
+                raise HTTPException(
+                    status_code=503,
+                    detail="STRIPE_WEBHOOK_SECRET is required outside local dev.",
+                )
             import json
             event = json.loads(payload)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Webhook signature verification failed: {e}")
 

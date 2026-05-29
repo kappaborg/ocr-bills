@@ -81,8 +81,21 @@ export default function ReconcilePage() {
   }
   if (!token) return null;
 
+  // Hold the page back until the plan is known — otherwise free users would
+  // see the upload form flash before the gated card replaces it.
+  if (billing === null) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
+        <div className="space-y-4">
+          <div className="h-8 w-40 animate-pulse rounded-xl bg-white/5" />
+          <div className="h-40 animate-pulse rounded-2xl bg-white/5" />
+        </div>
+      </main>
+    );
+  }
+
   // Plan check up-front so we don't show the upload UI to users who'd just get 402.
-  if (billing && billing.plan !== "business") {
+  if (billing.plan !== "business") {
     return (
       <main className="mx-auto max-w-2xl px-4 py-12 text-center">
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-cyan-400/90">Reconcile</p>

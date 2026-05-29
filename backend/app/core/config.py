@@ -31,6 +31,9 @@ class Settings(BaseSettings):
 
     # Comma-separated. Browsers treat localhost vs 127.0.0.1 as different origins — allow both for dev.
     FRONTEND_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # Optional regex for dynamic origins (Vercel preview deploys, branch URLs,
+    # etc.). Anchored regex — e.g. r"^https://.*\.vercel\.app$".
+    FRONTEND_ORIGIN_REGEX: str = ""
 
     # ── Billing (Stripe) ───────────────────────────────────────────────────
     # Leave empty in dev — endpoints return 503 until configured. In production:

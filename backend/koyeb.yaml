@@ -1,0 +1,31 @@
+# Koyeb service config — referenced from the UI when you deploy.
+# Most of these get overridden by the Web UI; this file mainly documents
+# the expected health-check path and exposed port.
+services:
+  - name: extasy-backend
+    type: web
+    instance_type: nano                # Free tier
+    regions:
+      - fra                            # Frankfurt — closest to Balkans
+    routes:
+      - path: /
+        port: 8000
+    health_checks:
+      - http:
+          path: /health
+          port: 8000
+        grace_period: 30s
+        interval: 30s
+        restart_limit: 3
+    scalings:
+      - min: 1
+        max: 1                         # Free tier is single instance
+    env:
+      - key: ENVIRONMENT
+        value: "production"
+      - key: OCR_ENGINE
+        value: "tesseract"             # flip to "gemini" after GEMINI_API_KEY set
+      - key: UPLOAD_DIR
+        value: "/tmp/uploads"          # ephemeral, OK for v1
+      - key: PORT
+        value: "8000"

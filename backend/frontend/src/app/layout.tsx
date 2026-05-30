@@ -5,6 +5,7 @@ import { AppBackground } from "@/components/AppBackground";
 import { TopNav } from "@/components/TopNav";
 import { ToastProvider } from "@/components/Toast";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
+import { THEME_NOFLASH_SCRIPT, ThemeProvider } from "@/components/ThemeProvider";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -28,7 +29,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head>
+        {/* Set data-theme before React hydrates — eliminates the dark-to-light
+            flash for users who chose light mode. Sourced from
+            ThemeProvider so the key + logic stay in one place. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_NOFLASH_SCRIPT }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-[family-name:var(--font-geist-sans)]`}
       >
@@ -40,14 +47,16 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <ToastProvider>
-          <ConfirmProvider>
-            <AppBackground>
-              <TopNav />
-              <div id="main-content">{children}</div>
-            </AppBackground>
-          </ConfirmProvider>
-        </ToastProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <ConfirmProvider>
+              <AppBackground>
+                <TopNav />
+                <div id="main-content">{children}</div>
+              </AppBackground>
+            </ConfirmProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

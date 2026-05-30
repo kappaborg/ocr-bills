@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { clearAccessToken } from "@/lib/auth";
+import { useTheme, type ThemeChoice } from "@/components/ThemeProvider";
 
 // ── Two-level navigation ─────────────────────────────────────────────────
 // Three primary tabs. Most secondary actions live in dropdowns under them.
@@ -82,6 +83,8 @@ export function TopNav() {
     if (accountOpen) document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [accountOpen]);
+
+  const { choice, setChoice, resolved } = useTheme();
 
   if (STANDALONE_ROUTES.has(pathname)) return null;
 
@@ -175,6 +178,39 @@ export function TopNav() {
                     Settings
                   </Link>
                 </li>
+
+                {/* Theme picker — three states, current one is highlighted */}
+                <li className="border-t border-white/10 px-4 py-2.5">
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500">Theme</p>
+                  <div className="mt-1.5 grid grid-cols-3 gap-1 rounded-lg border border-white/10 bg-slate-950/40 p-0.5">
+                    {(["light", "dark", "system"] as ThemeChoice[]).map((c) => {
+                      const active = choice === c;
+                      const label = c === "light" ? "Light" : c === "dark" ? "Dark" : "Auto";
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setChoice(c)}
+                          className={`rounded px-2 py-1 text-[11px] font-medium transition ${
+                            active
+                              ? "bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40"
+                              : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                          }`}
+                          aria-pressed={active}
+                          aria-label={`Switch to ${label} theme`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {choice === "system" && (
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      Following OS: currently <span className="text-slate-300">{resolved}</span>
+                    </p>
+                  )}
+                </li>
+
                 <li className="border-t border-white/10">
                   <button
                     type="button"

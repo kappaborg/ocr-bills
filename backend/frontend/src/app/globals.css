@@ -2,18 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Explicit dark app theme — avoids OS dark mode + white cards = invisible text */
-:root {
+/* ── Theme tokens ─────────────────────────────────────────────────────────
+ *
+ * Pragmatic v1 light/dark theming. The app is dark-first, so we keep the
+ * existing Tailwind color classes everywhere and use this stylesheet to:
+ *   1. expose semantic CSS variables (used by .glass-panel + .bg-app)
+ *   2. surgically remap the most-used dark Tailwind utilities when the user
+ *      opts into light mode (no per-component edits needed)
+ *
+ * Real, pixel-perfect light mode would require migrating every component to
+ * read CSS variables. That's a multi-day refactor. This gets us a switchable
+ * theme that "looks right" on landing/dashboard/inbox without touching the
+ * 60+ component files.
+ */
+
+:root,
+[data-theme="dark"] {
   color-scheme: dark;
-  --app-bg: #030712;
-  --surface: rgba(15, 23, 42, 0.75);
+  --bg-page:        #030712;
+  --bg-card:        rgba(15, 23, 42, 0.65);
+  --bg-card-soft:   rgba(2, 6, 23, 0.55);
+  --text-primary:   rgb(241 245 249);
+  --text-secondary: rgb(203 213 225);
+  --text-muted:     rgb(148 163 184);
+  --border-subtle:  rgba(255, 255, 255, 0.10);
+  --border-strong:  rgba(255, 255, 255, 0.15);
+  --accent:         #22d3ee;
+  --accent-dim:     rgba(34, 211, 238, 0.15);
+  --app-bg:         #030712;
+  --surface:        rgba(15, 23, 42, 0.75);
   --surface-border: rgba(255, 255, 255, 0.08);
-  --accent: #22d3ee;
-  --accent-dim: rgba(34, 211, 238, 0.15);
+  --backdrop-tint:  rgba(34, 211, 238, 0.12);
+  --gradient-end:   #0f172a;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-page:        rgb(248 250 252);              /* slate-50 */
+  --bg-card:        rgb(255 255 255);
+  --bg-card-soft:   rgb(248 250 252);
+  --text-primary:   rgb(15 23 42);                 /* slate-900 */
+  --text-secondary: rgb(51 65 85);                 /* slate-700 */
+  --text-muted:     rgb(100 116 139);              /* slate-500 */
+  --border-subtle:  rgb(226 232 240);              /* slate-200 */
+  --border-strong:  rgb(203 213 225);              /* slate-300 */
+  --accent:         #0891b2;                       /* cyan-600 — readable on white */
+  --accent-dim:     rgba(8, 145, 178, 0.10);
+  --app-bg:         rgb(248 250 252);
+  --surface:        rgb(255 255 255);
+  --surface-border: rgb(226 232 240);
+  --backdrop-tint:  rgba(8, 145, 178, 0.06);
+  --gradient-end:   rgb(241 245 249);
 }
 
 body {
   margin: 0;
+  background: var(--bg-page);
+  color: var(--text-primary);
 }
 
 @layer utilities {
@@ -21,27 +66,137 @@ body {
     background-color: var(--app-bg);
     background-image: radial-gradient(
         ellipse 80% 55% at 50% -15%,
-        rgba(34, 211, 238, 0.12),
+        var(--backdrop-tint),
         transparent 55%
       ),
-      linear-gradient(180deg, #030712 0%, #0f172a 100%);
+      linear-gradient(180deg, var(--app-bg) 0%, var(--gradient-end) 100%);
   }
 
   .bg-grid {
     background-size: 48px 48px;
     background-image: linear-gradient(
         to right,
-        rgba(255, 255, 255, 0.03) 1px,
+        var(--border-subtle) 1px,
         transparent 1px
       ),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      linear-gradient(to bottom, var(--border-subtle) 1px, transparent 1px);
   }
 
   .glass-panel {
-    @apply rounded-2xl border border-white/10 bg-slate-900/60 shadow-2xl shadow-cyan-500/5 backdrop-blur-xl;
+    border-radius: 1rem;
+    border: 1px solid var(--border-subtle);
+    background-color: var(--bg-card);
+    box-shadow: 0 20px 25px -5px rgba(8, 145, 178, 0.05);
+    backdrop-filter: blur(24px);
   }
 
   .text-glow {
     text-shadow: 0 0 40px rgba(34, 211, 238, 0.25);
   }
+}
+
+/* ── Light-mode overrides ────────────────────────────────────────────────
+ * Surgical remapping of the most-used dark Tailwind utilities. Each rule
+ * targets a class we use in dozens of places — flipping these covers the
+ * majority of UI surfaces without per-component edits. The accent gradients
+ * (from-cyan-500 to-emerald-500) are intentionally left as-is because they
+ * read fine on white backgrounds too.
+ */
+
+/* Text — collapse the slate-50/100/200 trio into one dark color; */
+/* slate-300/400 into a mid color; slate-500/600 stay dim. */
+[data-theme="light"] .text-slate-50,
+[data-theme="light"] .text-slate-100,
+[data-theme="light"] .text-slate-200 {
+  color: rgb(15 23 42);
+}
+[data-theme="light"] .text-slate-300,
+[data-theme="light"] .text-slate-400 {
+  color: rgb(71 85 105);
+}
+[data-theme="light"] .text-slate-500,
+[data-theme="light"] .text-slate-600 {
+  color: rgb(100 116 139);
+}
+
+/* Cyan brand text — bump from -300/-400 to -600/-700 for readability */
+[data-theme="light"] .text-cyan-200,
+[data-theme="light"] .text-cyan-300,
+[data-theme="light"] .text-cyan-400 {
+  color: rgb(14 116 144);   /* cyan-700 */
+}
+[data-theme="light"] .text-emerald-200,
+[data-theme="light"] .text-emerald-300 {
+  color: rgb(4 120 87);     /* emerald-700 */
+}
+
+/* Borders — every white/N alpha becomes slate-200 */
+[data-theme="light"] .border-white\/5,
+[data-theme="light"] .border-white\/10,
+[data-theme="light"] .border-white\/15,
+[data-theme="light"] .border-white\/20 {
+  border-color: rgb(226 232 240);
+}
+[data-theme="light"] .ring-white\/5,
+[data-theme="light"] .ring-white\/10,
+[data-theme="light"] .ring-white\/15 {
+  --tw-ring-color: rgb(226 232 240);
+}
+
+/* Backgrounds — white/N transparencies → slate-50 (soft surface) */
+[data-theme="light"] .bg-white\/\[0\.03\],
+[data-theme="light"] .bg-white\/\[0\.04\],
+[data-theme="light"] .bg-white\/\[0\.05\],
+[data-theme="light"] .bg-white\/5,
+[data-theme="light"] .bg-white\/10 {
+  background-color: rgb(248 250 252);
+}
+
+/* Dark slate panel bgs → white card */
+[data-theme="light"] .bg-slate-900,
+[data-theme="light"] .bg-slate-900\/60,
+[data-theme="light"] .bg-slate-900\/80,
+[data-theme="light"] .bg-slate-900\/95,
+[data-theme="light"] .bg-slate-950,
+[data-theme="light"] .bg-slate-950\/40,
+[data-theme="light"] .bg-slate-950\/50,
+[data-theme="light"] .bg-slate-950\/60,
+[data-theme="light"] .bg-slate-950\/70,
+[data-theme="light"] .bg-slate-950\/80,
+[data-theme="light"] .bg-slate-950\/95 {
+  background-color: rgb(255 255 255);
+}
+
+/* The full-bleed page background (modals, mobile sheet backdrops) — keep */
+/* a dimmed tint so modals still feel modal in light mode. */
+[data-theme="light"] .bg-slate-950\/70 {
+  background-color: rgba(15, 23, 42, 0.45);
+}
+
+/* Hover surfaces */
+[data-theme="light"] .hover\:bg-white\/5:hover,
+[data-theme="light"] .hover\:bg-white\/10:hover {
+  background-color: rgb(241 245 249);   /* slate-100 */
+}
+
+/* Subtle gradient panels (cyan tints from welcome card, etc.) */
+[data-theme="light"] .from-cyan-500\/10,
+[data-theme="light"] .from-cyan-500\/20 {
+  --tw-gradient-from: rgba(34, 211, 238, 0.10) var(--tw-gradient-from-position);
+}
+
+/* Inputs — make dark-bg inputs readable on white */
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  color: rgb(15 23 42);
+}
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: rgb(148 163 184);
+}
+
+/* Sticky nav stays visible on scroll — give it a slightly opaque bg */
+[data-theme="light"] header.bg-slate-950\/70 {
+  background-color: rgba(255, 255, 255, 0.85);
 }

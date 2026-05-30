@@ -22,7 +22,40 @@ type EditItem = {
   category_id: number | null;
   quantity: number | null;
   unit_price: number | null;
+  confidence_score: number;
+  // Whether the user expanded an otherwise-collapsed item to edit it.
+  // null = follow default (high-confidence collapses); true/false = user override.
+  expanded_override: boolean | null;
 };
+
+// ── Confidence heuristics ────────────────────────────────────────────────
+// Layer per-item signals on top of the backend's confidence_score to pick
+// a bucket. We deliberately don't surface the raw 0-1 number to users —
+// it'd invite "why is this 0.83?" debates. Just three plain-English states.
+type ConfBucket = "high" | "medium" | "low";
+
+function nameGarbageRatio(name: string): number {
+  const s = (name || "").trim();
+  if (!s) return 1;
+  const letters = (s.match(/[\p{L}]/gu) ?? []).length;
+  return 1 - letters / s.length;
+}
+
+function itemConfidence(it: EditItem): ConfBucket {
+  // Synthetic adjustments on top of the backend score. A high backend score
+  // can be demoted if the name looks like OCR junk, and a low backend score
+  // can be promoted if the user has already edited it (heuristic: a price
+  // that's a "round" amount suggests human-set, etc. — kept minimal here).
+  let score = it.confidence_score;
+  if (it.item_price <= 0) score = Math.min(score, 0.3);
+  if (!it.item_name || it.item_name.trim().length < 2) score = Math.min(score, 0.2);
+  if (nameGarbageRatio(it.item_name) > 0.4) score = Math.min(score, 0.5);
+  if (it.category_id == null) score -= 0.05;  // soft demotion for un-categorized
+
+  if (score >= 0.85) return "high";
+  if (score >= 0.6)  return "medium";
+  return "low";
+}
 
 let _keyCounter = 0;
 function makeKey() { return ++_keyCounter; }
@@ -133,6 +166,8 @@ export default function ReceiptReviewPage() {
           category_id: it.category_id ?? null,
           quantity: it.quantity ?? null,
           unit_price: it.unit_price ?? null,
+          confidence_score: typeof it.confidence_score === "number" ? it.confidence_score : 0.5,
+          expanded_override: null,
         }))
       );
     };
@@ -281,7 +316,17 @@ export default function ReceiptReviewPage() {
   const addItem = () => {
     setEditItems((prev) => [
       ...prev,
-      { _key: makeKey(), item_name: "", item_price: 0, category_id: null, quantity: null, unit_price: null },
+      {
+        _key: makeKey(),
+        item_name: "",
+        item_price: 0,
+        category_id: null,
+        quantity: null,
+        unit_price: null,
+        // Manually-added rows are trusted as user-entered + must be expanded.
+        confidence_score: 1,
+        expanded_override: true,
+      },
     ]);
   };
 
@@ -510,23 +555,61 @@ export default function ReceiptReviewPage() {
             )}
           </section>
 
-          {/* Editable items */}
+          {/* Editable items — confidence-aware: high-conf items collapse to a
+              single line, low-conf items get amber border + always-expanded */}
           <section className="glass-panel p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-50">Items</h2>
-                <p className="mt-0.5 text-sm text-slate-500">
-                  Edit names, prices or categories. Delete junk rows.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={addItem}
-                className="shrink-0 rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/10"
-              >
-                + Add item
-              </button>
-            </div>
+            {(() => {
+              const sumItems = editItems.reduce((s, it) => s + (it.item_price || 0), 0);
+              const totalAmt = receipt.total_amount ?? 0;
+              const sumDelta = Math.abs(sumItems - totalAmt);
+              const sumMismatch = totalAmt > 0 && (sumDelta / totalAmt) > 0.01;
+
+              const buckets = editItems.map(itemConfidence);
+              const lowCount = buckets.filter((b) => b === "low").length;
+              const medCount = buckets.filter((b) => b === "medium").length;
+
+              return (
+                <>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-50">Items</h2>
+                      <p className="mt-0.5 text-sm text-slate-500">
+                        {editItems.length} extracted
+                        {lowCount > 0 && (
+                          <>
+                            {" · "}
+                            <span className="font-medium text-amber-300">{lowCount} flagged</span>
+                          </>
+                        )}
+                        {medCount > 0 && lowCount === 0 && (
+                          <>{" · "}{medCount} could use a glance</>
+                        )}
+                        {" · click any row to expand"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addItem}
+                      className="shrink-0 rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/10"
+                    >
+                      + Add item
+                    </button>
+                  </div>
+
+                  {sumMismatch && (
+                    <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+                      <p className="font-medium">Items don&apos;t add up to the receipt total.</p>
+                      <p className="mt-1 text-xs text-amber-300/80">
+                        Items sum to {formatCurrency(sumItems, receipt.currency)} but the receipt
+                        total is {formatCurrency(totalAmt, receipt.currency)} — off by{" "}
+                        <span className="font-mono">{formatCurrency(sumDelta, receipt.currency)}</span>.
+                        Likely the OCR missed an item or grabbed a tax line as one.
+                      </p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             {editItems.length === 0 ? (
               <div className="mt-6 rounded-xl border border-dashed border-white/15 px-6 py-8 text-center">
@@ -535,86 +618,155 @@ export default function ReceiptReviewPage() {
                 </p>
               </div>
             ) : (
-              <ul className="mt-5 space-y-3">
-                {editItems.map((it) => (
-                  <li
-                    key={it._key}
-                    className="rounded-xl border border-white/10 bg-slate-950/60 p-3 ring-1 ring-white/5"
-                  >
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                      {/* Name */}
-                      <input
-                        type="text"
-                        value={it.item_name}
-                        onChange={(e) => updateItem(it._key, { item_name: e.target.value })}
-                        placeholder="Item name"
-                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900/80 px-3 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
-                      />
+              <ul className="mt-5 space-y-2">
+                {editItems.map((it) => {
+                  const bucket = itemConfidence(it);
+                  const collapsedByDefault = bucket === "high";
+                  const isExpanded = it.expanded_override ?? !collapsedByDefault;
+                  const borderColor =
+                    bucket === "low"
+                      ? "border-amber-500/40 ring-amber-500/20"
+                      : bucket === "medium"
+                        ? "border-white/15 ring-white/10"
+                        : "border-white/10 ring-white/5";
 
-                      {/* Price */}
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={it.item_price || ""}
-                        onChange={(e) =>
-                          updateItem(it._key, { item_price: parseFloat(e.target.value) || 0 })
-                        }
-                        placeholder="0.00"
-                        className="w-24 shrink-0 rounded-lg border border-white/10 bg-slate-900/80 px-3 py-1.5 font-mono text-sm text-emerald-300 placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
-                      />
-
-                      {/* Category */}
-                      <select
-                        value={it.category_id ?? ""}
-                        onChange={(e) =>
-                          updateItem(it._key, {
-                            category_id: e.target.value ? Number(e.target.value) : null,
-                          })
-                        }
-                        className="w-36 shrink-0 rounded-lg border border-white/10 bg-slate-900/80 px-2 py-1.5 text-xs text-slate-300 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+                  // Compact (collapsed) row — high-confidence items
+                  if (!isExpanded) {
+                    return (
+                      <li
+                        key={it._key}
+                        onClick={() => updateItem(it._key, { expanded_override: true })}
+                        className={`group flex cursor-pointer items-center justify-between gap-3 rounded-xl border bg-slate-950/40 px-4 py-2.5 ring-1 transition hover:bg-slate-950/60 ${borderColor}`}
                       >
-                        <option value="">Category…</option>
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] text-emerald-300 ring-1 ring-emerald-500/30">
+                          ✓
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm text-slate-200">
+                          {it.item_name || "(unnamed)"}
+                        </span>
+                        <span className="shrink-0 font-mono text-sm tabular-nums text-emerald-300">
+                          {formatCurrency(it.item_price, receipt.currency)}
+                        </span>
+                        <span className="hidden text-[10px] text-slate-500 group-hover:inline">
+                          edit ↓
+                        </span>
+                      </li>
+                    );
+                  }
 
-                      {/* Delete with inline confirm */}
-                      {pendingDeleteKey === it._key ? (
-                        <div className="flex shrink-0 items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => deleteItem(it._key)}
-                            className="rounded-lg px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-900/40"
-                          >
-                            Delete
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setPendingDeleteKey(null)}
-                            className="rounded-lg px-2 py-1 text-xs font-medium text-slate-400 hover:bg-white/5"
-                          >
-                            Cancel
-                          </button>
+                  // Expanded row — medium/low confidence OR user-expanded
+                  return (
+                    <li
+                      key={it._key}
+                      className={`rounded-xl border bg-slate-950/60 p-3 ring-1 ${borderColor}`}
+                    >
+                      {bucket === "low" && (
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300 ring-1 ring-amber-500/30">
+                            ⚠ Looks unclear
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            OCR low-confidence — double-check the price + name
+                          </span>
                         </div>
-                      ) : (
+                      )}
+                      {bucket === "medium" && (
+                        <div className="mb-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                            Review
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        {/* Name */}
+                        <input
+                          type="text"
+                          value={it.item_name}
+                          onChange={(e) => updateItem(it._key, { item_name: e.target.value })}
+                          placeholder="Item name"
+                          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900/80 px-3 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+                        />
+
+                        {/* Price */}
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={it.item_price || ""}
+                          onChange={(e) =>
+                            updateItem(it._key, { item_price: parseFloat(e.target.value) || 0 })
+                          }
+                          placeholder="0.00"
+                          className="w-24 shrink-0 rounded-lg border border-white/10 bg-slate-900/80 px-3 py-1.5 font-mono text-sm text-emerald-300 placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+                        />
+
+                        {/* Category */}
+                        <select
+                          value={it.category_id ?? ""}
+                          onChange={(e) =>
+                            updateItem(it._key, {
+                              category_id: e.target.value ? Number(e.target.value) : null,
+                            })
+                          }
+                          className={`w-36 shrink-0 rounded-lg border bg-slate-900/80 px-2 py-1.5 text-xs focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 ${
+                            it.category_id == null
+                              ? "border-amber-500/40 text-amber-200"
+                              : "border-white/10 text-slate-300"
+                          }`}
+                        >
+                          <option value="">Pick category…</option>
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Delete with inline confirm */}
+                        {pendingDeleteKey === it._key ? (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => deleteItem(it._key)}
+                              className="rounded-lg px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-900/40"
+                            >
+                              Delete
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteKey(null)}
+                              className="rounded-lg px-2 py-1 text-xs font-medium text-slate-400 hover:bg-white/5"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setPendingDeleteKey(it._key)}
+                            className="shrink-0 rounded-lg p-1.5 text-slate-500 transition hover:bg-red-900/40 hover:text-red-300"
+                            aria-label="Delete item"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
+                              <path fillRule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5A.75.75 0 0 1 9.95 6Z" clipRule="evenodd" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Collapse back to compact view if user expanded a high-conf item */}
+                      {collapsedByDefault && (
                         <button
                           type="button"
-                          onClick={() => setPendingDeleteKey(it._key)}
-                          className="shrink-0 rounded-lg p-1.5 text-slate-500 transition hover:bg-red-900/40 hover:text-red-300"
-                          aria-label="Delete item"
+                          onClick={() => updateItem(it._key, { expanded_override: false })}
+                          className="mt-2 text-[10px] text-slate-500 hover:text-slate-300"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
-                            <path fillRule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5A.75.75 0 0 1 9.95 6Z" clipRule="evenodd" />
-                          </svg>
+                          ↑ Collapse
                         </button>
                       )}
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             )}
 

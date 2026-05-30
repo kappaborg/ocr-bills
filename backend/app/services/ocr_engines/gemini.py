@@ -21,7 +21,7 @@ from app.services.ocr_engines.base import OCREngine, OCRResult, StructuredItem, 
 
 _DEFAULT_MODEL = "gemini-2.5-flash"
 
-_PROMPT = """\
+_BASE_PROMPT = """\
 You are extracting structured data from a receipt photo. Return JSON only
 matching the schema. Read the receipt carefully even if it is in Bosnian,
 Serbian, Croatian, Russian, Arabic, German, Turkish, Japanese, Chinese, Korean,
@@ -44,6 +44,29 @@ Rules:
   preserving line breaks
 
 Be conservative: if a field is unclear, use null. Do not invent data."""
+
+
+def _format_user_context(ctx) -> str:
+    """Render a UserContext into the Hints block appended to the prompt.
+
+    Returns an empty string when the user has no meaningful history (new
+    accounts, or sample-only) so the model doesn't see noise. The block is
+    framed as a hint — Gemini should still prefer what the image actually
+    shows, only falling back when the image is ambiguous.
+    """
+    if ctx is None or not getattr(ctx, "is_meaningful", lambda: False)():
+        return ""
+
+    lines = ["\n\nHints from this user's recent receipts (use ONLY to disambiguate, NEVER to override what the image clearly shows):"]
+    if ctx.common_stores:
+        lines.append(f"- They commonly shop at: {', '.join(ctx.common_stores)}")
+    if ctx.common_currencies:
+        lines.append(f"- Their typical currencies: {', '.join(ctx.common_currencies)}")
+    if ctx.primary_language:
+        lines.append(f"- Their receipts are usually in language: {ctx.primary_language}")
+    if ctx.common_categories:
+        lines.append(f"- Categories they actively use: {', '.join(ctx.common_categories)}")
+    return "\n".join(lines)
 
 
 _RESPONSE_SCHEMA: dict = {
@@ -104,7 +127,7 @@ class GeminiEngine(OCREngine):
     def __init__(self, model: str | None = None):
         self.model = model or getattr(settings, "OCR_VLM_MODEL", "") or _DEFAULT_MODEL
 
-    def extract(self, file_path: str) -> OCRResult:
+    def extract(self, file_path: str, context=None) -> OCRResult:
         api_key = getattr(settings, "GEMINI_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
         if not api_key:
             raise RuntimeError(
@@ -130,12 +153,14 @@ class GeminiEngine(OCREngine):
 
         mime = "image/png" if file_path.lower().endswith(".png") else "image/jpeg"
 
+        prompt = _BASE_PROMPT + _format_user_context(context)
+
         try:
             response = client.models.generate_content(
                 model=self.model,
                 contents=[
                     types.Part.from_bytes(data=image_bytes, mime_type=mime),
-                    _PROMPT,
+                    prompt,
                 ],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",

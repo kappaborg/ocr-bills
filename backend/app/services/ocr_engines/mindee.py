@@ -23,7 +23,7 @@ from app.services.ocr_engines.base import OCREngine, OCRResult
 class MindeeEngine(OCREngine):
     name = "mindee"
 
-    def extract(self, file_path: str) -> OCRResult:
+    def extract(self, file_path: str, context=None) -> OCRResult:
         raise NotImplementedError(
             "MindeeEngine is a stub. Install `mindee`, set MINDEE_API_KEY, "
             "and implement extract() using ReceiptV5 parser."

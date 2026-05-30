@@ -24,7 +24,7 @@ from app.services.ocr_engines.base import OCREngine, OCRResult
 class PaddleEngine(OCREngine):
     name = "paddle"
 
-    def extract(self, file_path: str) -> OCRResult:
+    def extract(self, file_path: str, context=None) -> OCRResult:
         raise NotImplementedError(
             "PaddleEngine is a stub. Set up the sidecar 3.12 venv or wait for "
             "Py 3.14 wheels, then implement extract()."

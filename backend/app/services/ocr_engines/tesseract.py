@@ -152,7 +152,9 @@ def _ocr_image(img, lang: str, cfg: str) -> tuple[str, int]:
 class TesseractEngine(OCREngine):
     name = "tesseract"
 
-    def extract(self, file_path: str) -> OCRResult:
+    def extract(self, file_path: str, context=None) -> OCRResult:
+        # Tesseract is regex-based; we can't usefully consume user context here.
+        _ = context  # noqa: F841
         try:
             import pytesseract  # noqa: F401  (verify installed)
             from PIL import Image

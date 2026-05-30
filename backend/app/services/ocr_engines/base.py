@@ -17,7 +17,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.user_context import UserContext
 
 
 @dataclass
@@ -54,6 +57,12 @@ class OCREngine(ABC):
     name: str = "base"
 
     @abstractmethod
-    def extract(self, file_path: str) -> OCRResult:
-        """Run OCR on a single image file and return text (+ optional structured fields)."""
+    def extract(self, file_path: str, context: "Optional[UserContext]" = None) -> OCRResult:
+        """Run OCR on a single image file and return text (+ optional structured fields).
+
+        `context` is an optional UserContext (per-user history summary). Engines
+        that support natural-language prompts (Gemini, Claude) can use it to
+        disambiguate edge cases — common stores, currencies, language, etc.
+        Regex-based engines (Tesseract) can ignore it.
+        """
         ...

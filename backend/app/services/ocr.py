@@ -15,6 +15,7 @@ _ENGINE_REGISTRY below, and flip OCR_ENGINE in .env.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Optional
 
 from app.core.config import settings
 from app.services.ocr_engines.base import OCREngine, OCRResult
@@ -23,6 +24,7 @@ from app.services.ocr_engines.gemini import GeminiEngine
 from app.services.ocr_engines.mindee import MindeeEngine
 from app.services.ocr_engines.paddle import PaddleEngine
 from app.services.ocr_engines.tesseract import TesseractEngine
+from app.services.user_context import UserContext
 
 
 _ENGINE_REGISTRY: dict[str, type[OCREngine]] = {
@@ -45,9 +47,14 @@ def _get_engine() -> OCREngine:
     return cls()
 
 
-def run_ocr(file_path: str) -> OCRResult:
-    """Run the configured OCR engine. Returns raw text plus optional structured fields."""
-    return _get_engine().extract(file_path)
+def run_ocr(file_path: str, context: Optional[UserContext] = None) -> OCRResult:
+    """Run the configured OCR engine. Returns raw text plus optional structured fields.
+
+    `context` is an optional per-user history summary (see user_context.py) that
+    Gemini-class engines weave into their prompt to disambiguate edge cases.
+    Tesseract ignores it.
+    """
+    return _get_engine().extract(file_path, context=context)
 
 
 def extract_text_from_image(file_path: str) -> str:

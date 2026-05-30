@@ -7,6 +7,7 @@ from app.db.init_db import init_db
 from app.services.categorization import categorize_item
 from app.services.language_detection import detect_language
 from app.services.ocr import run_ocr
+from app.services.user_context import build_user_context, invalidate as invalidate_user_context
 from app.services.receipt_parser import extract_tax_amount, looks_like_bosnia_fiscal_receipt, parse_receipt
 
 
@@ -29,7 +30,19 @@ def process_receipt(receipt_id: int) -> None:
         db.commit()
 
         file_path = os.path.join(settings.UPLOAD_DIR, receipt.storage_key)
-        ocr_result = run_ocr(file_path)
+
+        # Compile a context summary from this user's history. Cheap when cached,
+        # one query on cache-miss. Engines that can use it (Gemini) bias OCR
+        # toward this user's reality; others ignore it.
+        user_ctx = None
+        try:
+            user_ctx = build_user_context(receipt.user_id, db)
+        except Exception:
+            # Building context must never block OCR. Worst case: fall back to
+            # context-free extraction (same accuracy as before this commit).
+            user_ctx = None
+
+        ocr_result = run_ocr(file_path, context=user_ctx)
         raw_text = ocr_result.raw_text
 
         # When the engine already extracted structured fields (VLM path), trust

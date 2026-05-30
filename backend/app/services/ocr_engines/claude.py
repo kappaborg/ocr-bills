@@ -21,7 +21,7 @@ from app.services.ocr_engines.base import OCREngine, OCRResult
 class ClaudeEngine(OCREngine):
     name = "claude"
 
-    def extract(self, file_path: str) -> OCRResult:
+    def extract(self, file_path: str, context=None) -> OCRResult:
         raise NotImplementedError(
             "ClaudeEngine is a stub. Install `anthropic`, set ANTHROPIC_API_KEY, "
             "and implement extract() — see gemini.py for the structured-output pattern."

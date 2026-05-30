@@ -826,5 +826,10 @@ def confirm_receipt(
     from app.services.inventory_update import update_inventory_for_receipt
     update_inventory_for_receipt(receipt, db)
 
+    # Drop the cached user-context so the next OCR call sees this freshly
+    # confirmed receipt in the user's history.
+    from app.services.user_context import invalidate as _invalidate_ctx
+    _invalidate_ctx(receipt.user_id)
+
     db.refresh(receipt)
     return _get_receipt_out(receipt)

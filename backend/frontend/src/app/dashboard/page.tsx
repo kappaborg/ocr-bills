@@ -34,6 +34,17 @@ import {
 
 const DISPLAY_CCY_KEY = "ocrbills:displayCurrency";
 const DATE_RANGE_KEY = "ocrbills:dateRange";
+const QUOTA_HALFWAY_DISMISS_KEY = "ocrbills:quotaHalfwayDismissed"; // value = ISO week, e.g. "2026-W22"
+
+function currentIsoWeek(): string {
+  // YYYY-Www ISO week key — used to scope dismissal to one calendar week.
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}
 
 type DateRange = "7d" | "30d" | "365d" | "all";
 const DATE_RANGE_OPTS: { value: DateRange; label: string; days: number | null }[] = [
@@ -79,6 +90,8 @@ export default function DashboardPage() {
   // ── Settings: display currency + date range, both localStorage-backed
   const [displayCurrency, setDisplayCurrency] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>("30d");
+  // Quota-halfway hint visibility (dismissed scoped to ISO week)
+  const [halfwayHintVisible, setHalfwayHintVisible] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -86,6 +99,8 @@ export default function DashboardPage() {
     if (ccy) setDisplayCurrency(ccy);
     const dr = window.localStorage.getItem(DATE_RANGE_KEY) as DateRange | null;
     if (dr) setDateRange(dr);
+    const dismissed = window.localStorage.getItem(QUOTA_HALFWAY_DISMISS_KEY);
+    setHalfwayHintVisible(dismissed !== currentIsoWeek());
   }, []);
   useEffect(() => {
     if (displayCurrency && typeof window !== "undefined")
@@ -468,12 +483,53 @@ export default function DashboardPage() {
                 ? "bg-red-500"
                 : billing.usage.percent >= 80
                   ? "bg-amber-400"
-                  : "bg-cyan-400"
+                  : billing.usage.percent >= 50
+                    ? "bg-cyan-300"
+                    : "bg-cyan-400/60"
             }`}
             style={{ width: `${Math.min(100, billing.usage.percent)}%` }}
           />
         </div>
       )}
+      {/* 50% halfway hint — dismissible per ISO week so it doesn't nag */}
+      {billing &&
+        billing.plan === "free" &&
+        billing.usage.receipts_quota > 0 &&
+        billing.usage.percent >= 50 &&
+        billing.usage.percent < 80 &&
+        halfwayHintVisible && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-500/30 bg-cyan-500/[0.05] px-4 py-3 text-sm">
+            <p className="text-slate-300">
+              <span className="font-medium text-cyan-200">Halfway through your free month.</span>{" "}
+              <span className="text-slate-400">
+                You&apos;ve used {billing.usage.receipts_used} of {billing.usage.receipts_quota} receipts.
+                Pro is unlimited + unlocks PDF/Xero exports, budgets, recurring detection, and price-change alerts.
+              </span>
+            </p>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => router.push("/pricing")}
+                className="rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:brightness-110"
+              >
+                See Pro
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.localStorage.setItem(QUOTA_HALFWAY_DISMISS_KEY, currentIsoWeek());
+                  }
+                  setHalfwayHintVisible(false);
+                }}
+                className="rounded-md px-2 py-1 text-xs text-slate-500 hover:text-slate-300"
+                aria-label="Dismiss this week"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
       {/* Date range chips */}
       <div className="mb-6 flex flex-wrap items-center gap-2">

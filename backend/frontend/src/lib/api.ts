@@ -567,6 +567,8 @@ export type PlansResponse = {
   currency: string;
   plans: PlanInfo[];
   configured: boolean;
+  /** Days of free trial offered on first checkout (0 = no trial) */
+  trial_days?: number;
 };
 export async function listPlans(): Promise<PlansResponse> {
   return apiFetch<PlansResponse>("/billing/plans", {});

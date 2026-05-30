@@ -82,6 +82,7 @@ def list_plans():
     """Pricing-page data. No auth, no Stripe key needed."""
     return {
         "currency": "USD",
+        "trial_days": settings.TRIAL_PERIOD_DAYS,
         "plans": [
             {
                 "id": Plan.free.value,
@@ -175,7 +176,14 @@ def create_checkout(
         sub.stripe_customer_id = customer_id
     db.commit()
 
-    session = stripe.checkout.Session.create(
+    # 14-day free trial on every first subscription. Stripe auto-converts
+    # to paid at trial end + emits subscription.updated → our webhook flips
+    # status from "trialing" to "active". No charge until day 14.
+    # Returning customers who previously trialed won't get another trial
+    # — Stripe blocks that by default at the customer level.
+    trial_days = getattr(settings, "TRIAL_PERIOD_DAYS", 14)
+
+    session_args = dict(
         mode="subscription",
         customer=customer_id,
         line_items=[{"price": price_id, "quantity": 1}],
@@ -184,6 +192,10 @@ def create_checkout(
         allow_promotion_codes=True,
         metadata={"user_id": str(user.id), "plan": payload.plan},
     )
+    if trial_days > 0:
+        session_args["subscription_data"] = {"trial_period_days": trial_days}
+
+    session = stripe.checkout.Session.create(**session_args)
     return {"checkout_url": session.url, "session_id": session.id}
 
 

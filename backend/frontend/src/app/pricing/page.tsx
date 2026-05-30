@@ -10,6 +10,7 @@ export default function PricingPage() {
   const [plans, setPlans] = useState<PlanInfo[]>([]);
   const [currency, setCurrency] = useState("USD");
   const [configured, setConfigured] = useState(true);
+  const [trialDays, setTrialDays] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [checkoutFor, setCheckoutFor] = useState<string | null>(null);
@@ -20,6 +21,7 @@ export default function PricingPage() {
         setPlans(r.plans);
         setCurrency(r.currency);
         setConfigured(r.configured);
+        setTrialDays(r.trial_days ?? 0);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load pricing"))
       .finally(() => setLoading(false));
@@ -132,9 +134,16 @@ export default function PricingPage() {
                     : checkoutFor === p.id
                       ? "Redirecting…"
                       : configured
-                        ? `Subscribe to ${p.name}`
+                        ? (trialDays > 0
+                            ? `Start ${trialDays}-day free trial`
+                            : `Subscribe to ${p.name}`)
                         : "Setup pending"}
                 </button>
+                {!isFree && configured && trialDays > 0 && (
+                  <p className="mt-2 text-center text-[11px] text-slate-500">
+                    No charge for {trialDays} days · cancel any time
+                  </p>
+                )}
               </section>
             );
           })}

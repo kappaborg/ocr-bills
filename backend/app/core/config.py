@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     PRICE_PRO_CENTS: int = 499
     PRICE_BUSINESS_CENTS: int = 1999
 
+    # Free trial length applied to first-time Stripe checkouts (set 0 to disable).
+    TRIAL_PERIOD_DAYS: int = 14
+
     # Frontend URL for Stripe Checkout redirects
     FRONTEND_URL: str = "http://localhost:3737"
 

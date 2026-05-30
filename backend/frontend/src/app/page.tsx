@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getAccessToken } from "@/lib/auth";
 import { listPlans, type PlanInfo } from "@/lib/api";
@@ -42,7 +41,6 @@ const FEATURES: { title: string; body: string; icon: string }[] = [
 
 
 export default function Landing() {
-  const router = useRouter();
   const [token, setToken] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [plans, setPlans] = useState<PlanInfo[]>([]);

@@ -8,9 +8,9 @@ export default function BillingSuccessPage() {
       <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/20 text-3xl text-emerald-300 ring-1 ring-emerald-500/40">
         ✓
       </span>
-      <h1 className="mt-4 text-2xl font-semibold text-slate-50">You're in</h1>
+      <h1 className="mt-4 text-2xl font-semibold text-slate-50">You&apos;re in</h1>
       <p className="mt-2 text-sm text-slate-400">
-        Stripe is confirming your subscription. Your new plan will be active in a few seconds — refresh the dashboard if it hasn't switched yet.
+        Stripe is confirming your subscription. Your new plan will be active in a few seconds — refresh the dashboard if it hasn&apos;t switched yet.
       </p>
       <div className="mt-6 flex gap-3">
         <Link

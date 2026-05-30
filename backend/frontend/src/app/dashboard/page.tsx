@@ -608,7 +608,7 @@ export default function DashboardPage() {
                 </span>
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                Products you've bought repeatedly at a steady pace.
+                Products you&apos;ve bought repeatedly at a steady pace.
               </p>
               <ul className="mt-4 space-y-2">
                 {recurring.slice(0, 6).map((r) => (

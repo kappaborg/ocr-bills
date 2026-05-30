@@ -148,6 +148,121 @@ def list_insights(db: Session = Depends(get_db), user=Depends(get_current_user))
             )
         )
 
+    # ── Total-outlier anomaly: defensive against OCR mis-reads ─────────────
+    # Common failure: Gemini grabs "147,00" instead of "14,70" because of
+    # comma/dot ambiguity, or pulls a serial number as the total. To catch
+    # this, look at the median of all receipt totals at a store and flag
+    # anything > 3x the median. Median (not mean) so a single huge outlier
+    # doesn't blow up its own threshold.
+    import statistics as _stats
+    from collections import defaultdict
+    store_totals: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    receipt_rows = (
+        db.query(Receipt.id, Receipt.store_name, Receipt.total_amount)
+        .filter(Receipt.user_id == user.id)
+        .filter(Receipt.processing_status == ReceiptStatus.confirmed.value)
+        .filter(Receipt.total_amount.isnot(None))
+        .filter(Receipt.total_amount > 0)
+        .filter(Receipt.store_name.isnot(None))
+        .all()
+    )
+    for rid, store, total in receipt_rows:
+        store_totals[store].append((rid, float(total)))
+
+    # (ratio, rid, store, total, typical_median)
+    worst_outlier: tuple[float, int, str, float, float] | None = None
+    for store, rows in store_totals.items():
+        if len(rows) < 3:
+            continue
+        amounts = [t for _, t in rows]
+        median = _stats.median(amounts)
+        if median <= 0:
+            continue
+        for rid, total in rows:
+            if total < median * 3:  # threshold: 3x typical receipt
+                continue
+            ratio = total / median
+            if worst_outlier is None or ratio > worst_outlier[0]:
+                worst_outlier = (ratio, rid, store, total, median)
+
+    if worst_outlier is not None:
+        ratio, rid, store, total, typical = worst_outlier
+        insights.append(
+            InsightOut(
+                id=-5,
+                type="info",
+                message=(
+                    f"Receipt #{rid} at {store} totals {total:.2f} — "
+                    f"your typical receipt there is around {typical:.2f}. "
+                    f"Likely an OCR mis-read; double-check the total."
+                ),
+                metadata_json={
+                    "kind": "total_outlier",
+                    "receipt_id": rid,
+                    "store": store,
+                    "total": total,
+                    "typical": typical,
+                    "ratio": round(ratio, 2),
+                },
+                created_at=now,
+            )
+        )
+
+    # ── Late-recurring anomaly: subscription vigilance ─────────────────────
+    # Cross-reference inventory_items: if a product has been bought ≥3 times
+    # at a steady cadence (avg_interval_days set) and current time is more
+    # than (avg_interval + 30%) past last_purchased, flag it.
+    from app.db.models import InventoryItem, Product
+    overdue_rows = (
+        db.query(
+            Product.name,
+            InventoryItem.last_purchased_at,
+            InventoryItem.avg_interval_days,
+            InventoryItem.purchase_count,
+        )
+        .join(Product, Product.id == InventoryItem.product_id)
+        .filter(InventoryItem.user_id == user.id)
+        .filter(InventoryItem.purchase_count >= 3)
+        .filter(InventoryItem.avg_interval_days.isnot(None))
+        .filter(InventoryItem.last_purchased_at.isnot(None))
+        .all()
+    )
+    worst_late: tuple[float, str, int, float] | None = None  # (lateness_ratio, name, days_late, interval)
+    for name, last, interval_days, count in overdue_rows:
+        if interval_days is None or last is None or interval_days <= 0:
+            continue
+        days_since = (now - last).total_seconds() / 86400.0
+        # Only flag truly overdue items — 30% past the average interval AND at
+        # least 3 days late in absolute terms.
+        if days_since <= interval_days * 1.3:
+            continue
+        if days_since - interval_days < 3:
+            continue
+        ratio = days_since / interval_days
+        if worst_late is None or ratio > worst_late[0]:
+            worst_late = (ratio, name, int(days_since - interval_days), interval_days)
+
+    if worst_late is not None:
+        ratio, product_name, days_late, interval = worst_late
+        insights.append(
+            InsightOut(
+                id=-6,
+                type="info",
+                message=(
+                    f"You usually buy '{product_name}' every ~{interval:.0f} days, "
+                    f"but it's been {int(ratio * interval)} days since the last one. "
+                    f"Did you cancel, or just forget to upload the receipt?"
+                ),
+                metadata_json={
+                    "kind": "late_recurring",
+                    "product": product_name,
+                    "avg_interval_days": interval,
+                    "days_late": days_late,
+                },
+                created_at=now,
+            )
+        )
+
     if not insights:
         # Baseline insight
         total_30 = sum_q.filter(Receipt.receipt_date >= last_30).scalar() or 0.0

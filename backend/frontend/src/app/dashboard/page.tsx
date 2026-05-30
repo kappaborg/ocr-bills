@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { ReceiptThumbnail } from "@/components/ReceiptThumbnail";
 import {
   clearSampleData,
   deleteReceipt,
@@ -961,11 +962,19 @@ export default function DashboardPage() {
                     key={receipt_id}
                     className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-100">
-                        {store_name ?? `Receipt #${receipt_id}`}
-                      </p>
-                      <p className="text-xs text-slate-500">#{receipt_id}</p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <ReceiptThumbnail
+                        receiptId={receipt_id}
+                        token={token}
+                        alt={store_name ?? `Receipt ${receipt_id}`}
+                        size={36}
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-100">
+                          {store_name ?? `Receipt #${receipt_id}`}
+                        </p>
+                        <p className="text-xs text-slate-500">#{receipt_id}</p>
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <button

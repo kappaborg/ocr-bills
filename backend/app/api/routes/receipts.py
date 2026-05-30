@@ -667,6 +667,54 @@ def get_receipt_image(
     )
 
 
+@router.get("/{receipt_id}/thumbnail")
+def get_receipt_thumbnail(
+    receipt_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    Serves a 200x200 JPEG thumbnail of the receipt image.
+
+    Generated on first request, cached on disk next to the original
+    (`{original}.thumb.jpg`). Subsequent requests skip Pillow and serve the
+    cached file directly. Tiny payload (~10-20 KB) for list-view rendering.
+    """
+    receipt = db.query(Receipt).filter(Receipt.id == receipt_id, Receipt.user_id == user.id).first()
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    original_path = _storage_path(receipt.storage_key)
+    if not os.path.exists(original_path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+
+    thumb_path = original_path + ".thumb.jpg"
+    if not os.path.exists(thumb_path):
+        try:
+            from PIL import Image, ImageOps
+            with Image.open(original_path) as src:
+                # Respect phone-camera rotation so the thumbnail isn't sideways.
+                src = ImageOps.exif_transpose(src)
+                src = src.convert("RGB")
+                # Cover-fit into a 200x200 square; ImageOps.fit does center-crop
+                # which looks much better than letterbox for receipt grids.
+                thumb = ImageOps.fit(src, (200, 200), method=Image.Resampling.LANCZOS)
+                thumb.save(thumb_path, "JPEG", quality=78, optimize=True)
+        except Exception as e:
+            # Don't 500 on thumbnail failure — log + fall back to original.
+            # (List views will be slower but still work.)
+            raise HTTPException(status_code=500, detail=f"Thumbnail generation failed: {e}")
+
+    return FileResponse(
+        thumb_path,
+        media_type="image/jpeg",
+        headers={
+            # Thumbnails are immutable per receipt — long cache + immutable hint.
+            "Cache-Control": "private, max-age=86400, immutable",
+        },
+    )
+
+
 @router.get("/{receipt_id}", response_model=ReceiptOut)
 def get_receipt(receipt_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     receipt = _load_receipt(receipt_id, user.id, db)

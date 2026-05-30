@@ -13,6 +13,7 @@ import type { ReceiptOut } from "@/lib/types";
 import { formatCurrency, formatTimeAgo } from "@/lib/format";
 import { useToast } from "@/components/Toast";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { ReceiptThumbnail } from "@/components/ReceiptThumbnail";
 
 // Inbox shows receipts that finished OCR but haven't been confirmed yet.
 // Power users with 50+ receipts/month will live here.
@@ -280,19 +281,27 @@ export default function InboxPage() {
                   <button
                     type="button"
                     onClick={() => setCursor(i)}
-                    className={`block w-full rounded-lg px-3 py-2 text-left transition ${
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition ${
                       i === cursor
                         ? "bg-cyan-500/15 ring-1 ring-cyan-500/40"
                         : "hover:bg-white/5"
                     }`}
                   >
-                    <p className="truncate text-sm font-medium text-slate-100">
-                      {r.store_name ?? `Receipt #${r.id}`}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                      {formatTimeAgo(r.receipt_date ?? null)} ·{" "}
-                      {r.items.length} item{r.items.length === 1 ? "" : "s"}
-                    </p>
+                    <ReceiptThumbnail
+                      receiptId={r.id}
+                      token={token}
+                      alt={r.store_name ?? `Receipt ${r.id}`}
+                      size={40}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-100">
+                        {r.store_name ?? `Receipt #${r.id}`}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                        {formatTimeAgo(r.receipt_date ?? null)} ·{" "}
+                        {r.items.length} item{r.items.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
                   </button>
                 </li>
               ))}

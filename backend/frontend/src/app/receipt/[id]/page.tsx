@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
-import { confirmReceipt, getReceipt, getReceiptImageBlob, listCategories } from "@/lib/api";
+import {
+  confirmReceipt,
+  getReceipt,
+  getReceiptImageBlob,
+  listCategories,
+  streamReceiptStatus,
+} from "@/lib/api";
 import type { ReceiptOut } from "@/lib/types";
 import { formatCurrency, formatReceiptDate } from "@/lib/format";
 
@@ -54,6 +60,19 @@ function statusLabel(status: string): string {
   return map[status] ?? status;
 }
 
+// Narration shown while OCR is running. Picks one line based on elapsed
+// seconds — gives users a sense the system is alive even without granular
+// progress signals from the backend.
+function progressNarration(status: string, elapsedSec: number): string {
+  if (status === "queued") return "Just opened your receipt — about to start";
+  if (status !== "processing") return "";
+  if (elapsedSec < 3)   return "Reading the image…";
+  if (elapsedSec < 7)   return "Detecting text in any language…";
+  if (elapsedSec < 14)  return "Extracting line items and totals…";
+  if (elapsedSec < 22)  return "Almost done…";
+  return "Taking a little longer than usual — hold on";
+}
+
 export default function ReceiptReviewPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -97,53 +116,132 @@ export default function ReceiptReviewPage() {
     return () => clearInterval(id);
   }, [loading]);
 
-  // Load receipt (poll until processed) + categories
+  // Load receipt + subscribe to status stream (SSE), with polling fallback.
   useEffect(() => {
     if (!token || !receiptId) return;
 
     let cancelled = false;
+    let streamHandle: { close: () => void } | null = null;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const applyItems = (r: ReceiptOut) => {
+      setEditItems(
+        r.items.map((it) => ({
+          _key: makeKey(),
+          item_name: it.item_name,
+          item_price: it.item_price,
+          category_id: it.category_id ?? null,
+          quantity: it.quantity ?? null,
+          unit_price: it.unit_price ?? null,
+        }))
+      );
+    };
+
+    const refetchAndFinish = async () => {
+      try {
+        const r = await getReceipt(receiptId, token);
+        if (cancelled) return;
+        setReceipt(r);
+        if (r.processing_status === "parsed" || r.processing_status === "confirmed" || r.processing_status === "error") {
+          applyItems(r);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load");
+      }
+    };
+
+    const pollFallback = async () => {
+      const maxPolls = Math.ceil((MAX_POLL_SECONDS * 1000) / POLL_INTERVAL_MS);
+      let timedOut = true;
+      for (let i = 0; i < maxPolls; i++) {
+        if (cancelled) return;
+        try {
+          const r = await getReceipt(receiptId, token);
+          if (cancelled) return;
+          setReceipt(r);
+          if (r.processing_status === "parsed" || r.processing_status === "confirmed" || r.processing_status === "error") {
+            applyItems(r);
+            timedOut = false;
+            setLoading(false);
+            break;
+          }
+        } catch {
+          /* transient error — keep polling */
+        }
+        await new Promise((res) => { pollTimer = setTimeout(res, POLL_INTERVAL_MS); });
+      }
+      if (timedOut && !cancelled) {
+        setProcessingTimeout(true);
+        setLoading(false);
+      }
+    };
 
     const run = async () => {
       setLoading(true);
       setError(null);
       try {
-        const cats = await getCachedCategories();
-        if (!cancelled) setCategories(cats);
+        // Categories load alongside; doesn't block status subscription.
+        getCachedCategories().then((cats) => { if (!cancelled) setCategories(cats); }).catch(() => {});
 
-        const maxPolls = Math.ceil((MAX_POLL_SECONDS * 1000) / POLL_INTERVAL_MS);
-        let timedOut = true;
-        for (let i = 0; i < maxPolls; i++) {
-          const r = await getReceipt(receiptId, token);
-          if (cancelled) return;
-          setReceipt(r);
-
-          const st = r.processing_status;
-          if (st === "parsed" || st === "confirmed" || st === "error") {
-            timedOut = false;
-            setEditItems(
-              r.items.map((it) => ({
-                _key: makeKey(),
-                item_name: it.item_name,
-                item_price: it.item_price,
-                category_id: it.category_id ?? null,
-                quantity: it.quantity ?? null,
-                unit_price: it.unit_price ?? null,
-              }))
-            );
-            break;
-          }
-          await new Promise((res) => setTimeout(res, POLL_INTERVAL_MS));
+        // 1. Fetch initial state once so we have something to render immediately.
+        const initial = await getReceipt(receiptId, token);
+        if (cancelled) return;
+        setReceipt(initial);
+        if (
+          initial.processing_status === "parsed" ||
+          initial.processing_status === "confirmed" ||
+          initial.processing_status === "error"
+        ) {
+          applyItems(initial);
+          setLoading(false);
+          return;  // Already terminal — no stream needed
         }
-        if (timedOut && !cancelled) setProcessingTimeout(true);
+
+        // 2. Subscribe to SSE for status transitions.
+        streamHandle = streamReceiptStatus(
+          receiptId,
+          token,
+          (ev) => {
+            if (cancelled) return;
+            // Merge the lightweight status event into our receipt object so the
+            // UI updates immediately even before the full refetch lands.
+            setReceipt((prev) => prev ? {
+              ...prev,
+              processing_status: ev.status,
+              processing_error: ev.processing_error ?? prev.processing_error,
+              store_name: ev.store_name ?? prev.store_name,
+              total_amount: ev.total_amount ?? prev.total_amount,
+              currency: ev.currency ?? prev.currency,
+            } : prev);
+
+            // On terminal status, refetch full payload (items) and stop loading.
+            if (ev.status === "parsed" || ev.status === "confirmed" || ev.status === "error") {
+              refetchAndFinish();
+            }
+          },
+          (reason) => {
+            if (cancelled) return;
+            // Fall back to polling if SSE failed before reaching terminal state.
+            if (reason === "error" || reason === "timeout") {
+              pollFallback();
+            }
+          },
+        );
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load");
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load");
+          setLoading(false);
+        }
       }
     };
 
     run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (streamHandle) streamHandle.close();
+      if (pollTimer) clearTimeout(pollTimer);
+    };
   }, [receiptId, token]);
 
   // Load receipt image after receipt is known
@@ -222,14 +320,16 @@ export default function ReceiptReviewPage() {
     }
   };
 
-  // ── Loading message based on elapsed time ─────────────────────────────────
+  // ── Loading message based on current status + elapsed time ────────────────
 
+  const currentStatus = receipt?.processing_status ?? "queued";
+  // Status-aware narration. Falls back to elapsed-time messaging when we
+  // don't have a live SSE update yet.
   const loadingMessage =
-    elapsed < 5
-      ? "Reading your receipt…"
-      : elapsed < 15
+    progressNarration(currentStatus, elapsed) ||
+    (elapsed < 15
       ? `Still working… (${elapsed}s)`
-      : `This is taking longer than usual (${elapsed}s) — large images can take up to 36 seconds`;
+      : `This is taking longer than usual (${elapsed}s)`);
 
   const progressPct = Math.min((elapsed / MAX_POLL_SECONDS) * 100, 95);
 
@@ -308,14 +408,28 @@ export default function ReceiptReviewPage() {
 
       {loading ? (
         <div className="glass-panel flex flex-col items-center justify-center gap-4 px-8 py-16 text-center">
+          {/* Status chip + live pulse — communicates that we're actively
+              listening to the backend, not just spinning blindly. */}
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400/60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
+            </span>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${statusBadge(currentStatus)}`}
+            >
+              {statusLabel(currentStatus)}
+            </span>
+          </div>
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-400" />
-          <p className="text-sm text-slate-400">{loadingMessage}</p>
+          <p className="text-sm text-slate-300">{loadingMessage}</p>
           <div className="w-48 overflow-hidden rounded-full bg-white/10 h-1.5">
             <div
               className="h-full rounded-full bg-cyan-400 transition-all duration-1000"
               style={{ width: `${progressPct}%` }}
             />
           </div>
+          <p className="text-[11px] text-slate-500">Live updates from the OCR pipeline</p>
         </div>
       ) : !receipt ? (
         <p className="text-sm text-slate-400">Receipt not found.</p>

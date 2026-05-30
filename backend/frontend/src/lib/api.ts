@@ -100,6 +100,112 @@ export async function listReceipts(token: string): Promise<ReceiptOut[]> {
   return apiFetch<ReceiptOut[]>("/receipts", { token });
 }
 
+// ── Server-Sent Events for receipt processing status ──────────────────────
+// We use fetch+ReadableStream instead of EventSource because EventSource
+// doesn't support custom headers and we need to send the JWT.
+
+export type ReceiptStatusEvent = {
+  status: "queued" | "processing" | "parsed" | "confirmed" | "error";
+  processing_error?: string | null;
+  store_name?: string | null;
+  total_amount?: number | null;
+  currency?: string | null;
+  items_count?: number;
+};
+
+export type ReceiptStreamHandle = { close: () => void };
+
+/**
+ * Subscribe to a receipt's processing status. Calls onEvent for every status
+ * change emitted by the backend. Auto-closes on terminal status, error, or
+ * when the returned handle.close() is invoked.
+ *
+ * Returns an opaque handle whose .close() aborts the underlying fetch.
+ */
+export function streamReceiptStatus(
+  receiptId: number,
+  token: string,
+  onEvent: (ev: ReceiptStatusEvent) => void,
+  onClose?: (reason: "terminal" | "timeout" | "error" | "gone" | "aborted") => void,
+): ReceiptStreamHandle {
+  const ctrl = new AbortController();
+  let closed = false;
+
+  const close = (reason: "terminal" | "timeout" | "error" | "gone" | "aborted") => {
+    if (closed) return;
+    closed = true;
+    try { ctrl.abort(); } catch { /* ignore */ }
+    onClose?.(reason);
+  };
+
+  (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/receipts/${receiptId}/events`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: ctrl.signal,
+      });
+      if (!res.ok || !res.body) {
+        close("error");
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          close("terminal");
+          return;
+        }
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE messages are separated by blank lines.
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const raw of parts) {
+          let eventType = "message";
+          let data = "";
+          for (const line of raw.split("\n")) {
+            if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+            else if (line.startsWith("data: ")) data += line.slice(6);
+            // ":" prefixed = comments / heartbeats, ignored
+          }
+          if (!data) continue;
+
+          if (eventType === "status") {
+            try {
+              const parsed = JSON.parse(data) as ReceiptStatusEvent;
+              onEvent(parsed);
+              if (
+                parsed.status === "parsed" ||
+                parsed.status === "error" ||
+                parsed.status === "confirmed"
+              ) {
+                close("terminal");
+                return;
+              }
+            } catch { /* malformed event, skip */ }
+          } else if (eventType === "timeout") {
+            close("timeout");
+            return;
+          } else if (eventType === "gone") {
+            close("gone");
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") close("aborted");
+      else close("error");
+    }
+  })();
+
+  return { close: () => close("aborted") };
+}
+
 export async function confirmReceipt(
   receiptId: number,
   payload: { items: { item_name: string; item_price: number; category_id?: number | null; quantity?: number | null; unit_price?: number | null }[] },

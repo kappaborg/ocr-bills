@@ -4,8 +4,11 @@ import uuid
 
 from datetime import date as _date, datetime, timedelta
 
+import asyncio
+import json as _json
+
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
 
@@ -426,6 +429,97 @@ def get_receipt_image(
 def get_receipt(receipt_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     receipt = _load_receipt(receipt_id, user.id, db)
     return _get_receipt_out(receipt)
+
+
+# Terminal statuses — the SSE stream emits one final event then closes.
+_TERMINAL_STATUSES = {"parsed", "confirmed", "error"}
+
+
+@router.get("/{receipt_id}/events")
+async def receipt_events(
+    receipt_id: int,
+    user=Depends(get_current_user),
+):
+    """
+    Server-Sent Events stream for a single receipt's processing status.
+
+    Emits one event per status transition (`queued` → `processing` → `parsed`
+    / `error` / `confirmed`). Closes when status is terminal or after ~60s
+    of total wall time (whichever comes first). Heartbeats every 15s to keep
+    intermediaries from buffering or timing out.
+
+    The frontend subscribes via EventSource and updates UI inline. Polling
+    remains the fallback for clients without EventSource.
+    """
+    async def event_stream():
+        # Open a fresh DB session per request — we can't reuse the dep-injected
+        # session inside a long-running generator because FastAPI closes it after
+        # the response starts streaming.
+        from app.db.session import SessionLocal
+
+        last_status: str | None = None
+        last_heartbeat = 0.0
+        total_elapsed = 0.0
+        poll_every = 0.5            # seconds
+        heartbeat_every = 15.0      # seconds
+        max_duration = 60.0         # seconds — generous OCR ceiling
+
+        while total_elapsed < max_duration:
+            # Pull primitives inside the session — the ORM object can't be
+            # touched once the session closes (lazy loads raise
+            # DetachedInstanceError otherwise).
+            db = SessionLocal()
+            try:
+                receipt = (
+                    db.query(Receipt)
+                    .options(selectinload(Receipt.items))
+                    .filter(Receipt.id == receipt_id, Receipt.user_id == user.id)
+                    .first()
+                )
+                if receipt is None:
+                    snapshot = None
+                else:
+                    snapshot = {
+                        "status": receipt.processing_status or "queued",
+                        "processing_error": receipt.processing_error,
+                        "store_name": receipt.store_name,
+                        "total_amount": receipt.total_amount,
+                        "currency": receipt.currency,
+                        "items_count": len(receipt.items or []),
+                    }
+            finally:
+                db.close()
+
+            if snapshot is None:
+                yield "event: gone\ndata: {}\n\n"
+                return
+
+            status_now = snapshot["status"]
+            if status_now != last_status:
+                yield f"event: status\ndata: {_json.dumps(snapshot)}\n\n"
+                last_status = status_now
+                if status_now in _TERMINAL_STATUSES:
+                    return
+
+            if total_elapsed - last_heartbeat >= heartbeat_every:
+                yield ": heartbeat\n\n"  # SSE comment; keeps the pipe warm
+                last_heartbeat = total_elapsed
+
+            await asyncio.sleep(poll_every)
+            total_elapsed += poll_every
+
+        # Timed out — final status emit so the client knows we gave up.
+        yield f"event: timeout\ndata: {_json.dumps({'last_status': last_status})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",     # tells nginx not to buffer SSE
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT)

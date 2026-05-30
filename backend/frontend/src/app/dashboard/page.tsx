@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearAccessToken, getAccessToken } from "@/lib/auth";
+import { getAccessToken } from "@/lib/auth";
 import {
   clearSampleData,
   deleteReceipt,
@@ -428,16 +428,6 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              clearAccessToken();
-              router.replace("/login");
-            }}
-            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10"
-          >
-            Log out
-          </button>
         </div>
       </div>
 

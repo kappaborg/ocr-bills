@@ -10,6 +10,45 @@ export function formatReceiptDate(iso: string | null | undefined): string {
   });
 }
 
+/**
+ * Humanized "time ago" label — "2 hours ago", "yesterday", "3 weeks ago".
+ * Past dates only; future dates fall back to the absolute date.
+ * Returns "—" for null/invalid inputs so callers can pass straight from API.
+ */
+export function formatTimeAgo(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+
+  const seconds = (Date.now() - d.getTime()) / 1000;
+  if (seconds < 0) return formatReceiptDate(iso);  // future → fall back to absolute
+  if (seconds < 45) return "just now";
+  if (seconds < 90) return "a minute ago";
+
+  const minutes = seconds / 60;
+  if (minutes < 45) return `${Math.round(minutes)} minutes ago`;
+  if (minutes < 90) return "an hour ago";
+
+  const hours = minutes / 60;
+  if (hours < 22) return `${Math.round(hours)} hours ago`;
+  if (hours < 36) return "yesterday";
+
+  const days = hours / 24;
+  if (days < 7) return `${Math.round(days)} days ago`;
+  if (days < 10) return "a week ago";
+
+  const weeks = days / 7;
+  if (weeks < 5) return `${Math.round(weeks)} weeks ago`;
+
+  const months = days / 30.44;
+  if (months < 1.5) return "a month ago";
+  if (months < 11) return `${Math.round(months)} months ago`;
+
+  const years = days / 365.25;
+  if (years < 1.5) return "a year ago";
+  return `${Math.round(years)} years ago`;
+}
+
 // Map currency code → BCP-47 locale for best Intl.NumberFormat formatting
 const _CURRENCY_LOCALE: Record<string, string> = {
   USD: "en-US", CAD: "en-CA", AUD: "en-AU", NZD: "en-NZ",

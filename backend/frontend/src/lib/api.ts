@@ -357,6 +357,31 @@ export async function getMe(token: string): Promise<{ id: number; email: string 
   return apiFetch<{ id: number; email: string }>("/auth/me", { token });
 }
 
+// ── GDPR-style account actions ─────────────────────────────────────────────
+
+/** Download a full JSON dump of the current user's data. */
+export async function downloadMyDataExport(token: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/auth/me/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Could not export data");
+  const blob = await res.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `extasy-export-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/** Permanently delete the current user + all owned data. */
+export async function deleteMyAccount(token: string): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/auth/me`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 204) throw new Error("Could not delete account");
+}
+
 // ── New endpoints (live FX, budgets, search, recurring, PDF, households, tax) ──
 
 export type FxRatesResponse = {

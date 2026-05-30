@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
 import {
   clearSampleData,
+  deleteMyAccount,
+  downloadMyDataExport,
   getMe,
   getMyBilling,
   getSampleDataStatus,
@@ -14,6 +16,9 @@ import {
   type BillingMe,
   type SampleDataStatus,
 } from "@/lib/api";
+import { clearAccessToken } from "@/lib/auth";
+import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 function passwordStrength(pw: string): { level: 0 | 1 | 2; label: string; color: string } {
   if (pw.length < 8) return { level: 0, label: "Weak", color: "bg-red-500" };
@@ -27,12 +32,16 @@ function passwordStrength(pw: string): { level: 0 | 1 | 2; label: string; color:
 export default function SettingsPage() {
   const router = useRouter();
   const token = getAccessToken();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [email, setEmail] = useState("");
   const [billing, setBilling] = useState<BillingMe | null>(null);
   const [sampleStatus, setSampleStatus] = useState<SampleDataStatus | null>(null);
   const [sampleBusy, setSampleBusy] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -66,6 +75,7 @@ export default function SettingsPage() {
   const handleClearSamples = async () => {
     if (!token || sampleBusy) return;
     if (!window.confirm("Remove all sample receipts? Your own uploads are not affected.")) return;
+    // (settings page intentionally keeps native confirm — short-running flow + simpler)
     setSampleBusy(true);
     setError(null);
     setSuccess(null);
@@ -77,6 +87,46 @@ export default function SettingsPage() {
       setError(err instanceof Error ? err.message : "Could not clear sample data");
     } finally {
       setSampleBusy(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!token || exportBusy) return;
+    setExportBusy(true);
+    try {
+      await downloadMyDataExport(token);
+      toast.push("Data export downloaded", { kind: "success" });
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : "Export failed", { kind: "error" });
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!token || deleteBusy) return;
+    const first = await confirm({
+      title: "Delete your account?",
+      body: "This removes ALL your receipts, products, budgets, and personal data permanently. Cannot be undone.",
+      confirmLabel: "I understand — continue",
+      danger: true,
+    });
+    if (!first) return;
+    const second = await confirm({
+      title: "Are you absolutely sure?",
+      body: "If you have an active subscription, cancel it via Manage billing first. Otherwise Stripe will continue billing your card.",
+      confirmLabel: "Delete my account",
+      danger: true,
+    });
+    if (!second) return;
+    setDeleteBusy(true);
+    try {
+      await deleteMyAccount(token);
+      clearAccessToken();
+      router.replace("/");
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : "Could not delete account", { kind: "error" });
+      setDeleteBusy(false);
     }
   };
 
@@ -331,6 +381,54 @@ export default function SettingsPage() {
               {saving ? "Saving…" : "Update password"}
             </button>
           </form>
+        </section>
+
+        {/* Danger zone — GDPR-style export + delete */}
+        <section className="rounded-2xl border border-red-500/30 bg-red-950/10 p-6">
+          <h2 className="text-base font-semibold text-red-200">Danger zone</h2>
+          <p className="mt-1 text-xs text-red-300/70">
+            These actions affect your account permanently. Both work without
+            contacting support.
+          </p>
+
+          <div className="mt-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/40 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-slate-100">Export my data</p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Download a JSON file with every receipt, item, product, budget, and
+                  household membership we have for you.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={exportBusy}
+                onClick={handleExport}
+                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10 disabled:opacity-50"
+              >
+                {exportBusy ? "Preparing…" : "Download .json"}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-950/20 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-red-200">Delete my account</p>
+                <p className="mt-0.5 text-xs text-red-300/80">
+                  Permanently removes your account and everything associated with it.
+                  If you&apos;re on a paid plan, cancel via Manage billing first — we
+                  can&apos;t refund retroactively.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={deleteBusy}
+                onClick={handleDeleteAccount}
+                className="rounded-xl border border-red-500/50 bg-red-950/40 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-950/60 disabled:opacity-50"
+              >
+                {deleteBusy ? "Deleting…" : "Delete account"}
+              </button>
+            </div>
+          </div>
         </section>
       </div>
     </main>

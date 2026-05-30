@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
+import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
 import {
   clearSampleData,
   deleteReceipt,
@@ -60,6 +62,8 @@ function Skeleton({ className = "" }: { className?: string }) {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   // Defer token read until after mount — getAccessToken() touches localStorage,
   // which is unavailable during SSR. Returning a stable skeleton until mount
   // keeps server and first client render identical (avoids hydration mismatch).
@@ -238,13 +242,20 @@ export default function DashboardPage() {
 
   const handleDeleteReceipt = async (receiptId: number) => {
     if (!token) return;
-    if (!window.confirm("Delete this receipt and all its items? This cannot be undone.")) return;
+    const ok = await confirm({
+      title: "Delete this receipt?",
+      body: "All items in this receipt will be removed. This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     setDeletingId(receiptId);
     try {
       await deleteReceipt(receiptId, token);
       setTransactions((prev) => prev.filter((t) => t.receipt_id !== receiptId));
+      toast.push("Receipt deleted", { kind: "success" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed");
+      toast.push(err instanceof Error ? err.message : "Delete failed", { kind: "error" });
     } finally {
       setDeletingId(null);
     }
@@ -304,7 +315,13 @@ export default function DashboardPage() {
 
   const handleClearSamples = async () => {
     if (!token || sampleBusy) return;
-    if (!window.confirm("Remove all sample receipts? Your own uploads are not affected.")) return;
+    const ok = await confirm({
+      title: "Clear sample data?",
+      body: "Sample receipts will be removed. Your own uploads are not affected.",
+      confirmLabel: "Clear",
+      danger: true,
+    });
+    if (!ok) return;
     setSampleBusy(true);
     try {
       await clearSampleData(token);

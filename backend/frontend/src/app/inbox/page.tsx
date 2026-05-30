@@ -10,7 +10,9 @@ import {
   listReceipts,
 } from "@/lib/api";
 import type { ReceiptOut } from "@/lib/types";
-import { formatCurrency, formatReceiptDate } from "@/lib/format";
+import { formatCurrency, formatTimeAgo } from "@/lib/format";
+import { useToast } from "@/components/Toast";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 // Inbox shows receipts that finished OCR but haven't been confirmed yet.
 // Power users with 50+ receipts/month will live here.
@@ -28,6 +30,8 @@ const SHORTCUTS: { key: InboxKey | string; label: string }[] = [
 
 export default function InboxPage() {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [token, setToken] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -38,7 +42,6 @@ export default function InboxPage() {
 
   const [allReceipts, setAllReceipts] = useState<ReceiptOut[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
   // The current selection cursor — index into `pending`
@@ -55,8 +58,9 @@ export default function InboxPage() {
     setLoading(true);
     listReceipts(token)
       .then((rs) => setAllReceipts(rs))
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .catch((e) => toast.push(e instanceof Error ? e.message : "Failed to load", { kind: "error" }))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, token, router]);
 
   // Pending = parsed (OCR done) but not yet confirmed.
@@ -110,7 +114,6 @@ export default function InboxPage() {
   const confirmCurrent = useCallback(async () => {
     if (!current || !token || busyId === current.id) return;
     setBusyId(current.id);
-    setError(null);
     try {
       const updated = await confirmReceipt(
         current.id,
@@ -127,13 +130,15 @@ export default function InboxPage() {
       );
       // Replace the receipt in our local list so it disappears from `pending`
       setAllReceipts((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      toast.push(`Confirmed: ${updated.store_name ?? `Receipt #${updated.id}`}`, { kind: "success" });
       // Cursor naturally moves to the next pending one because the list shrinks
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Confirm failed");
+      const msg = e instanceof Error ? e.message : "Confirm failed";
+      toast.push(msg, { kind: "error" });
     } finally {
       setBusyId(null);
     }
-  }, [current, token, busyId]);
+  }, [current, token, busyId, toast]);
 
   const skipToDetail = useCallback(() => {
     if (!current) return;
@@ -142,17 +147,25 @@ export default function InboxPage() {
 
   const deleteCurrent = useCallback(async () => {
     if (!current || !token || busyId === current.id) return;
-    if (!window.confirm(`Delete this receipt (${current.store_name ?? "no merchant"})? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: "Delete this receipt?",
+      body: `${current.store_name ?? "No merchant"} — ${current.items.length} item${current.items.length === 1 ? "" : "s"}. This cannot be undone.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     setBusyId(current.id);
     try {
       await deleteReceipt(current.id, token);
       setAllReceipts((prev) => prev.filter((r) => r.id !== current.id));
+      toast.push("Receipt deleted", { kind: "info" });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed");
+      const msg = e instanceof Error ? e.message : "Delete failed";
+      toast.push(msg, { kind: "error" });
     } finally {
       setBusyId(null);
     }
-  }, [current, token, busyId]);
+  }, [current, token, busyId, confirm, toast]);
 
   // ── Keyboard ──────────────────────────────────────────────────────────
 
@@ -227,12 +240,6 @@ export default function InboxPage() {
         </div>
       </div>
 
-      {error && (
-        <div role="alert" className="mb-4 rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-          {error}
-        </div>
-      )}
-
       {loading ? (
         <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
           <div className="h-96 animate-pulse rounded-2xl bg-white/5" />
@@ -283,7 +290,7 @@ export default function InboxPage() {
                       {r.store_name ?? `Receipt #${r.id}`}
                     </p>
                     <p className="mt-0.5 truncate text-[11px] text-slate-500">
-                      {formatReceiptDate(r.receipt_date ?? null)} ·{" "}
+                      {formatTimeAgo(r.receipt_date ?? null)} ·{" "}
                       {r.items.length} item{r.items.length === 1 ? "" : "s"}
                     </p>
                   </button>
@@ -321,7 +328,9 @@ export default function InboxPage() {
                   </p>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  {formatReceiptDate(current.receipt_date ?? null)} ·{" "}
+                  <span title={current.receipt_date ?? ""}>
+                    {formatTimeAgo(current.receipt_date ?? null)}
+                  </span> ·{" "}
                   {current.detected_language ?? "—"} ·{" "}
                   {current.items.length} item{current.items.length === 1 ? "" : "s"}
                 </p>

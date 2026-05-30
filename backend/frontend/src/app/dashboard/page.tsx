@@ -4,21 +4,25 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { clearAccessToken, getAccessToken } from "@/lib/auth";
 import {
+  clearSampleData,
   deleteReceipt,
   exportTransactionsCsv,
   exportTransactionsPdf,
   getFxRates,
   getMyBilling,
+  getSampleDataStatus,
   listBudgets,
   listInsights,
   listReceipts,
   listRecurring,
   listTransactions,
+  loadSampleData,
   searchReceipts,
   upsertBudget,
   type BillingMe,
   type BudgetOut,
   type RecurringItem,
+  type SampleDataStatus,
 } from "@/lib/api";
 import { InsightOut, ReceiptOut, TransactionOut } from "@/lib/types";
 import {
@@ -62,6 +66,8 @@ export default function DashboardPage() {
   const [recurringForecast, setRecurringForecast] = useState(0);
   const [receipts, setReceipts] = useState<ReceiptOut[]>([]);
   const [billing, setBilling] = useState<BillingMe | null>(null);
+  const [sampleStatus, setSampleStatus] = useState<SampleDataStatus | null>(null);
+  const [sampleBusy, setSampleBusy] = useState(false);
   const [searchResults, setSearchResults] = useState<ReceiptOut[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,8 +112,9 @@ export default function DashboardPage() {
       listReceipts(token),
       getFxRates().catch(() => null),
       getMyBilling(token).catch(() => null),
+      getSampleDataStatus(token).catch(() => null),
     ])
-      .then(([tx, ins, bud, rec, rec_full, fx, bill]) => {
+      .then(([tx, ins, bud, rec, rec_full, fx, bill, samp]) => {
         setTransactions(tx.results);
         setInsights(ins.results);
         setBudgets(bud.results);
@@ -115,6 +122,7 @@ export default function DashboardPage() {
         setRecurringForecast(rec.forecast_monthly_total);
         setReceipts(rec_full);
         setBilling(bill);
+        setSampleStatus(samp);
         if (fx) setFxRates(fx.rates);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
@@ -240,6 +248,56 @@ export default function DashboardPage() {
       setError(err instanceof Error ? err.message : "Export failed");
     } finally {
       setExportLoading(null);
+    }
+  };
+
+  const refreshAfterDataChange = async () => {
+    if (!token) return;
+    try {
+      const [tx, ins, bud, rec, rec_full, samp] = await Promise.all([
+        listTransactions(token),
+        listInsights(token),
+        listBudgets(token).catch(() => ({ results: [] })),
+        listRecurring(token, displayCurrency ?? "BAM").catch(() => ({ results: [], forecast_monthly_total: 0, currency: "BAM" })),
+        listReceipts(token),
+        getSampleDataStatus(token).catch(() => null),
+      ]);
+      setTransactions(tx.results);
+      setInsights(ins.results);
+      setBudgets(bud.results);
+      setRecurring(rec.results);
+      setRecurringForecast(rec.forecast_monthly_total);
+      setReceipts(rec_full);
+      setSampleStatus(samp);
+    } catch {
+      /* non-fatal; user can refresh */
+    }
+  };
+
+  const handleLoadSamples = async () => {
+    if (!token || sampleBusy) return;
+    setSampleBusy(true);
+    try {
+      await loadSampleData(token);
+      await refreshAfterDataChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load sample data");
+    } finally {
+      setSampleBusy(false);
+    }
+  };
+
+  const handleClearSamples = async () => {
+    if (!token || sampleBusy) return;
+    if (!window.confirm("Remove all sample receipts? Your own uploads are not affected.")) return;
+    setSampleBusy(true);
+    try {
+      await clearSampleData(token);
+      await refreshAfterDataChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not clear sample data");
+    } finally {
+      setSampleBusy(false);
     }
   };
 
@@ -449,6 +507,66 @@ export default function DashboardPage() {
           <Skeleton className="h-32" />
           <Skeleton className="h-64" />
         </div>
+      ) : receipts.length === 0 ? (
+        // ── Truly empty: welcome card with 3 CTAs ────────────────────────────
+        <section className="glass-panel p-6 sm:p-10">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-cyan-400/90">Welcome</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">
+            Let&apos;s scan your first receipt.
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-slate-400">
+            Three ways to start. Pick whichever feels right — you can mix and match later.
+          </p>
+
+          <div className="mt-7 grid gap-4 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => router.push("/upload")}
+              className="group rounded-2xl border border-cyan-500/40 bg-gradient-to-b from-cyan-500/10 to-transparent p-5 text-left transition hover:border-cyan-400 hover:bg-cyan-500/15"
+            >
+              <p className="text-2xl">↑</p>
+              <p className="mt-3 text-sm font-semibold text-slate-100">Upload a photo</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Drag a receipt photo from your computer. OCR runs in ~5 seconds.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => router.push("/scan")}
+              className="group rounded-2xl border border-white/15 bg-white/[0.03] p-5 text-left transition hover:border-cyan-400/50 hover:bg-cyan-500/5"
+            >
+              <p className="text-2xl">◉</p>
+              <p className="mt-3 text-sm font-semibold text-slate-100">Use your camera</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Live receipt-frame overlay. Works on phones too.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              disabled={sampleBusy}
+              onClick={handleLoadSamples}
+              className="group rounded-2xl border border-white/15 bg-white/[0.03] p-5 text-left transition hover:border-emerald-400/50 hover:bg-emerald-500/5 disabled:opacity-50"
+            >
+              <p className="text-2xl">✨</p>
+              <p className="mt-3 text-sm font-semibold text-slate-100">
+                {sampleBusy ? "Loading…" : "Try with sample data"}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Adds 7 example receipts so you can explore the dashboard. Clearly tagged
+                &quot;Sample —&quot; so you can wipe them later.
+              </p>
+            </button>
+          </div>
+
+          <p className="mt-6 text-xs text-slate-500">
+            You&apos;re on the <span className="font-medium text-slate-300">{billing?.plan ?? "free"}</span> plan
+            {billing?.usage.receipts_quota
+              ? ` · ${billing.usage.receipts_used} / ${billing.usage.receipts_quota} receipts this month`
+              : ""}.
+          </p>
+        </section>
       ) : (
         <div className="space-y-8">
           {/* Total spend + tax + currency selector + spike indicator */}
@@ -498,8 +616,8 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {/* Budgets — one bar per category with a configured limit */}
-          {budgets.length > 0 && (
+          {/* Budgets — show progress bars if any exist, otherwise plan-aware empty state */}
+          {budgets.length > 0 ? (
             <section className="glass-panel p-5 sm:p-6">
               <h2 className="text-lg font-semibold text-slate-50">Monthly budgets</h2>
               <p className="mt-1 text-xs text-slate-500">
@@ -539,13 +657,44 @@ export default function DashboardPage() {
                 })}
               </ul>
             </section>
+          ) : billing?.plan === "free" ? (
+            // Free users: tease budgets as a Pro feature
+            <section className="glass-panel flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-50">Monthly budgets</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Set a monthly limit per category. We&apos;ll show spent / remaining / projected end-of-month.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push("/pricing")}
+                className="rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-md shadow-cyan-500/25 hover:brightness-110"
+              >
+                Unlock with Pro
+              </button>
+            </section>
+          ) : (
+            // Pro+ but no budgets yet: encourage setting one
+            <section className="glass-panel p-5 sm:p-6">
+              <h2 className="text-lg font-semibold text-slate-50">Monthly budgets</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Hover any category row below and click &quot;Budget&quot; to set a monthly limit.
+                Bars fill in here as the month progresses.
+              </p>
+            </section>
           )}
 
           {/* By category */}
           <section className="glass-panel p-5 sm:p-6">
             <h2 className="text-lg font-semibold text-slate-50">By category</h2>
             {totalsByCategory.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">No confirmed spending in this range yet.</p>
+              <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-6 text-center">
+                <p className="text-sm text-slate-400">
+                  No spending in this window. Try switching the date range above to{" "}
+                  <span className="font-medium text-slate-200">All time</span>.
+                </p>
+              </div>
             ) : (
               <ul className="mt-4 space-y-2">
                 {totalsByCategory.map(([name, total]) => {
@@ -585,7 +734,16 @@ export default function DashboardPage() {
           <section className="glass-panel p-5 sm:p-6">
             <h2 className="text-lg font-semibold text-slate-50">Insights</h2>
             {insights.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">No insights yet.</p>
+              <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5">
+                <p className="text-sm text-slate-400">
+                  Insights appear once you have a few confirmed receipts. They&apos;ll surface things like:
+                </p>
+                <ul className="mt-2 space-y-1 text-xs text-slate-500">
+                  <li>· Items you&apos;ve bought 3+ times this month (frequency spikes)</li>
+                  <li>· Same product getting more expensive at the same store (price-change alerts)</li>
+                  <li>· Weekly spending jumps vs. the prior week</li>
+                </ul>
+              </div>
             ) : (
               <ul className="mt-4 space-y-3">
                 {insights.map((ins) => (
@@ -599,7 +757,7 @@ export default function DashboardPage() {
           </section>
 
           {/* Recurring expenses */}
-          {recurring.length > 0 && (
+          {recurring.length > 0 ? (
             <section className="glass-panel p-5 sm:p-6">
               <div className="flex items-baseline justify-between gap-3">
                 <h2 className="text-lg font-semibold text-slate-50">Recurring expenses</h2>
@@ -626,7 +784,16 @@ export default function DashboardPage() {
                 ))}
               </ul>
             </section>
-          )}
+          ) : billing && billing.plan !== "free" ? (
+            // Pro/Business but no recurring detected yet
+            <section className="glass-panel p-5 sm:p-6">
+              <h2 className="text-lg font-semibold text-slate-50">Recurring expenses</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Buy the same product 3+ times at a steady pace and it&apos;ll appear here with a
+                monthly-spend forecast.
+              </p>
+            </section>
+          ) : null}
 
           {/* Transactions — with API-backed search */}
           <section className="glass-panel p-5 sm:p-6">
@@ -758,6 +925,24 @@ export default function DashboardPage() {
                 ))}
               </ul>
             </section>
+          )}
+
+          {/* Discreet sample-data footer — only when sample data is loaded */}
+          {sampleStatus?.loaded && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-3 text-xs">
+              <p className="text-slate-500">
+                <span className="font-mono text-slate-300">{sampleStatus.count}</span> sample
+                receipts loaded — clearly tagged so you can spot them.
+              </p>
+              <button
+                type="button"
+                disabled={sampleBusy}
+                onClick={handleClearSamples}
+                className="rounded-md px-2.5 py-1 text-slate-400 hover:bg-red-950/40 hover:text-red-300 disabled:opacity-50"
+              >
+                {sampleBusy ? "Removing…" : "Clear sample data"}
+              </button>
+            </div>
           )}
         </div>
       )}

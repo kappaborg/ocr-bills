@@ -71,10 +71,36 @@ export default function InventoryPage() {
 
       <div className="mt-8 space-y-6">
         {loading ? (
-          <div className="glass-panel p-6 text-sm text-slate-400">Loading…</div>
+          <div className="glass-panel space-y-3 p-6">
+            <div className="h-4 w-32 animate-pulse rounded-md bg-white/10" />
+            <div className="h-16 animate-pulse rounded-xl bg-white/5" />
+            <div className="h-16 animate-pulse rounded-xl bg-white/5" />
+            <div className="h-16 animate-pulse rounded-xl bg-white/5" />
+          </div>
         ) : items.length === 0 ? (
-          <div className="glass-panel p-6 text-sm text-slate-400">
-            No products yet. Confirm a few receipts, then come back.
+          <div className="glass-panel p-8 text-center">
+            <p className="text-3xl">📦</p>
+            <h2 className="mt-3 text-lg font-semibold text-slate-100">No products yet</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-slate-400">
+              Inventory is built automatically from your confirmed receipts. The more receipts
+              you confirm, the more accurate your &quot;need to buy&quot; predictions become.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => router.push("/upload")}
+                className="rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-md shadow-cyan-500/25 hover:brightness-110"
+              >
+                Upload a receipt
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm text-slate-200 hover:bg-white/10"
+              >
+                Back to dashboard
+              </button>
+            </div>
           </div>
         ) : (
           grouped.map(([cat, arr]) => (

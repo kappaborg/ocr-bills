@@ -71,9 +71,10 @@ export default function NeedToBuyPage() {
 
       <div className="mt-8 space-y-6">
         {loading ? (
-          <div className="glass-panel flex items-center justify-center gap-3 p-10">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-400" />
-            <p className="text-sm text-slate-400">Loading…</p>
+          <div className="glass-panel space-y-3 p-6">
+            <div className="h-4 w-32 animate-pulse rounded-md bg-white/10" />
+            <div className="h-14 animate-pulse rounded-xl bg-white/5" />
+            <div className="h-14 animate-pulse rounded-xl bg-white/5" />
           </div>
         ) : items.length === 0 ? (
           <div className="glass-panel flex flex-col items-center gap-4 px-8 py-14 text-center">

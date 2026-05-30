@@ -100,6 +100,30 @@ export async function listReceipts(token: string): Promise<ReceiptOut[]> {
   return apiFetch<ReceiptOut[]>("/receipts", { token });
 }
 
+// ── Sample data (load / clear / status) ───────────────────────────────────
+
+export type SampleDataStatus = { loaded: boolean; count: number };
+
+export async function getSampleDataStatus(token: string): Promise<SampleDataStatus> {
+  return apiFetch<SampleDataStatus>("/receipts/samples/status", { token });
+}
+
+export async function loadSampleData(token: string): Promise<{ already_loaded: boolean; count: number }> {
+  return apiFetch<{ already_loaded: boolean; count: number }>(
+    "/receipts/samples",
+    { method: "POST", token },
+  );
+}
+
+export async function clearSampleData(token: string): Promise<void> {
+  const url = `${API_BASE_URL}/receipts/samples`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 204) throw new Error("Could not clear sample data");
+}
+
 // ── Server-Sent Events for receipt processing status ──────────────────────
 // We use fetch+ReadableStream instead of EventSource because EventSource
 // doesn't support custom headers and we need to send the JWT.

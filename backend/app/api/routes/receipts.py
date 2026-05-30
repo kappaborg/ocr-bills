@@ -385,6 +385,248 @@ def check_duplicate(
     }
 
 
+# ─── Sample data ────────────────────────────────────────────────────────────
+# A 1-click "try with sample data" feature for empty dashboards. Receipts are
+# created with their store_name prefixed by SAMPLE_PREFIX so the user can wipe
+# only the sample data later without touching anything real they uploaded.
+
+SAMPLE_PREFIX = "Sample — "
+
+# 7 curated receipts engineered so the dashboard shows budgets, insights
+# (frequency-spike, price-change), recurring detection, and multi-currency
+# all at once. Dates are relative to "now" at request time.
+_SAMPLE_RECEIPTS: list[dict] = [
+    # 25 days ago — first Konzum visit (price baseline)
+    {
+        "days_ago": 25, "store": "Konzum", "currency": "BAM", "lang": "bs",
+        "category": "Groceries", "total": 28.50,
+        "items": [
+            ("Hljeb crni 500g", 1, 1.50, 1.50),
+            ("Mlijeko 2.8% 1L", 1, 2.20, 2.20),
+            ("Jogurt prirodni", 1, 1.80, 1.80),
+            ("Banane 1kg", 1, 3.20, 3.20),
+            ("Kafa Franck 250g", 1, 8.50, 8.50),
+            ("Jaja 10kom", 1, 4.30, 4.30),
+            ("Sir Trapist 200g", 1, 4.50, 4.50),
+            ("Šećer 1kg", 1, 2.50, 2.50),
+        ],
+    },
+    # 18 days ago — Bingo grocery
+    {
+        "days_ago": 18, "store": "Bingo", "currency": "BAM", "lang": "bs",
+        "category": "Groceries", "total": 41.20,
+        "items": [
+            ("Pile cijelo 1.5kg", 1, 12.50, 12.50),
+            ("Krompir 2kg", 1, 3.60, 3.60),
+            ("Paradajz 1kg", 1, 4.20, 4.20),
+            ("Hljeb bijeli", 1, 1.50, 1.50),
+            ("Mlijeko 2.8% 1L", 1, 2.20, 2.20),
+            ("Riža 1kg", 1, 3.50, 3.50),
+            ("Ulje suncokretovo 1L", 1, 5.20, 5.20),
+            ("Maslac 250g", 1, 4.80, 4.80),
+            ("Jaja 10kom", 1, 3.70, 3.70),
+        ],
+    },
+    # 12 days ago — gas station (Transportation)
+    {
+        "days_ago": 12, "store": "PETRO", "currency": "BAM", "lang": "sr",
+        "category": "Transportation", "total": 60.00,
+        "items": [("Eurosuper BMB 95 30L", 30, 2.00, 60.00)],
+    },
+    # 9 days ago — Russian receipt, multi-currency showcase
+    {
+        "days_ago": 9, "store": "Магнит", "currency": "RUB", "lang": "ru",
+        "category": "Groceries", "total": 844.50,
+        "items": [
+            ("Хлеб ржаной", 1, 35.50, 35.50),
+            ("Молоко 1L", 1, 89.00, 89.00),
+            ("Сыр Российский 200г", 1, 250.00, 250.00),
+            ("Колбаса докторская", 1, 350.00, 350.00),
+            ("Чай Майский", 1, 120.00, 120.00),
+        ],
+    },
+    # 7 days ago — pharmacy (Healthcare)
+    {
+        "days_ago": 7, "store": "Apoteka MUP", "currency": "BAM", "lang": "bs",
+        "category": "Healthcare", "total": 18.40,
+        "items": [
+            ("Aspirin 100mg 30tbl", 1, 6.80, 6.80),
+            ("Vitamin C 1000mg", 1, 6.60, 6.60),
+            ("Maska zaštitna 5kom", 1, 5.00, 5.00),
+        ],
+    },
+    # 5 days ago — second Konzum visit, MILK PRICE BUMPED 2.20 → 2.65
+    # (drives the price_increase insight)
+    {
+        "days_ago": 5, "store": "Konzum", "currency": "BAM", "lang": "bs",
+        "category": "Groceries", "total": 22.65,
+        "items": [
+            ("Hljeb crni 500g", 1, 1.50, 1.50),
+            ("Mlijeko 2.8% 1L", 1, 2.65, 2.65),   # was 2.20 → flagged as price increase
+            ("Jogurt prirodni", 1, 1.80, 1.80),
+            ("Banane 1kg", 1, 3.20, 3.20),
+            ("Jaja 10kom", 1, 4.30, 4.30),
+            ("Voda 1.5L", 1, 1.20, 1.20),
+            ("Bombone", 1, 1.00, 1.00),
+            ("Tjestenina", 1, 1.90, 1.90),
+            ("Sir Trapist 200g", 1, 4.50, 4.50),  # round to 22.65
+        ],
+    },
+    # 2 days ago — cafe (Entertainment)
+    {
+        "days_ago": 2, "store": "Cafe Tito", "currency": "BAM", "lang": "bs",
+        "category": "Entertainment", "total": 14.50,
+        "items": [
+            ("Espresso", 2, 2.00, 4.00),
+            ("Croissant", 2, 2.50, 5.00),
+            ("Sok narandža", 2, 2.75, 5.50),
+        ],
+    },
+]
+
+
+def _generate_sample_raw_text(spec: dict, dt: datetime) -> str:
+    lines = [
+        spec["store"].upper(),
+        f"({SAMPLE_PREFIX.strip()} sample receipt for demo)",
+        dt.strftime("%d.%m.%Y %H:%M"),
+        "-" * 30,
+    ]
+    for name, qty, unit, total in spec["items"]:
+        if qty != 1:
+            lines.append(f"{name}  {qty}x{unit:.2f}  {total:.2f}")
+        else:
+            lines.append(f"{name}  {total:.2f}")
+    lines += ["-" * 30, f"UKUPNO  {spec['total']:.2f} {spec['currency']}"]
+    return "\n".join(lines)
+
+
+@router.post("/samples")
+def load_sample_data(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    Idempotent: if the user already has sample receipts (prefix detection), no-op.
+    Otherwise inserts 7 curated receipts + 2 budgets so the dashboard isn't empty.
+    """
+    existing = (
+        db.query(Receipt)
+        .filter(Receipt.user_id == user.id)
+        .filter(Receipt.store_name.like(f"{SAMPLE_PREFIX}%"))
+        .count()
+    )
+    if existing > 0:
+        return {"already_loaded": True, "count": existing}
+
+    # Look up category IDs once
+    categories = {c.name: c.id for c in db.query(Category).filter(Category.user_id.is_(None)).all()}
+
+    now = datetime.utcnow()
+    created_count = 0
+    for spec in _SAMPLE_RECEIPTS:
+        receipt_date = now - timedelta(days=spec["days_ago"])
+        store_label = f"{SAMPLE_PREFIX}{spec['store']}"
+
+        receipt = Receipt(
+            user_id=user.id,
+            storage_key=f"{user.id}/sample/{uuid.uuid4().hex}.jpg",
+            raw_text=_generate_sample_raw_text(spec, receipt_date),
+            detected_language=spec["lang"],
+            receipt_date=receipt_date,
+            store_name=store_label,
+            total_amount=spec["total"],
+            currency=spec["currency"],
+            processing_status=ReceiptStatus.confirmed.value,
+            created_at=receipt_date,
+            updated_at=receipt_date,
+        )
+        db.add(receipt)
+        db.flush()
+
+        cat_id = categories.get(spec["category"])
+        for item_name, qty, unit_price, item_price in spec["items"]:
+            db.add(ReceiptItem(
+                receipt_id=receipt.id,
+                item_name=item_name,
+                quantity=float(qty),
+                unit_price=float(unit_price),
+                item_price=float(item_price),
+                category_id=cat_id,
+                confidence_score=0.95,
+            ))
+        created_count += 1
+
+    # Also pre-create a couple of budgets for the Pro feature (they'll show
+    # "spent vs budget" against the sample data). These are tagged via a
+    # special note in the currency field — no clean way without schema change,
+    # so we accept that "clearing samples" doesn't auto-remove budgets. Users
+    # can edit/delete them manually from the dashboard.
+    from app.db.models import Budget
+    sample_budgets = [
+        ("Groceries", 200.00),
+        ("Transportation", 100.00),
+    ]
+    for cat_name, limit in sample_budgets:
+        cat_id = categories.get(cat_name)
+        if not cat_id:
+            continue
+        # Skip if user already has a budget for this category
+        existing_b = (
+            db.query(Budget)
+            .filter(Budget.user_id == user.id, Budget.category_id == cat_id)
+            .first()
+        )
+        if existing_b:
+            continue
+        db.add(Budget(
+            user_id=user.id,
+            category_id=cat_id,
+            monthly_limit=limit,
+            currency="BAM",
+        ))
+
+    db.commit()
+    return {"already_loaded": False, "count": created_count}
+
+
+@router.delete("/samples", status_code=status.HTTP_204_NO_CONTENT)
+def clear_sample_data(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    Remove only receipts the user got from the sample-data feature. User-uploaded
+    receipts are untouched. Budgets are left in place because they may have been
+    edited.
+    """
+    receipts = (
+        db.query(Receipt)
+        .filter(Receipt.user_id == user.id)
+        .filter(Receipt.store_name.like(f"{SAMPLE_PREFIX}%"))
+        .all()
+    )
+    for r in receipts:
+        db.delete(r)  # cascade drops items
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/samples/status")
+def sample_data_status(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Tells the frontend whether sample data is currently loaded for this user."""
+    count = (
+        db.query(Receipt)
+        .filter(Receipt.user_id == user.id)
+        .filter(Receipt.store_name.like(f"{SAMPLE_PREFIX}%"))
+        .count()
+    )
+    return {"loaded": count > 0, "count": count}
+
+
 @router.get("", response_model=list[ReceiptOut])
 def list_receipts(
     db: Session = Depends(get_db),

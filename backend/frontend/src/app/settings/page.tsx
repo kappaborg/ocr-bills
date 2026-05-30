@@ -3,7 +3,17 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/auth";
-import { getMe, getMyBilling, openCustomerPortal, updateProfile, type BillingMe } from "@/lib/api";
+import {
+  clearSampleData,
+  getMe,
+  getMyBilling,
+  getSampleDataStatus,
+  loadSampleData,
+  openCustomerPortal,
+  updateProfile,
+  type BillingMe,
+  type SampleDataStatus,
+} from "@/lib/api";
 
 function passwordStrength(pw: string): { level: 0 | 1 | 2; label: string; color: string } {
   if (pw.length < 8) return { level: 0, label: "Weak", color: "bg-red-500" };
@@ -20,6 +30,8 @@ export default function SettingsPage() {
 
   const [email, setEmail] = useState("");
   const [billing, setBilling] = useState<BillingMe | null>(null);
+  const [sampleStatus, setSampleStatus] = useState<SampleDataStatus | null>(null);
+  const [sampleBusy, setSampleBusy] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -32,7 +44,41 @@ export default function SettingsPage() {
     if (!token) { router.replace("/login"); return; }
     getMe(token).then((me) => setEmail(me.email)).catch(() => {});
     getMyBilling(token).then(setBilling).catch(() => {});
+    getSampleDataStatus(token).then(setSampleStatus).catch(() => {});
   }, [token, router]);
+
+  const handleLoadSamples = async () => {
+    if (!token || sampleBusy) return;
+    setSampleBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await loadSampleData(token);
+      setSampleStatus(await getSampleDataStatus(token));
+      setSuccess("Sample receipts loaded. Open the dashboard to see them.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load sample data");
+    } finally {
+      setSampleBusy(false);
+    }
+  };
+
+  const handleClearSamples = async () => {
+    if (!token || sampleBusy) return;
+    if (!window.confirm("Remove all sample receipts? Your own uploads are not affected.")) return;
+    setSampleBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await clearSampleData(token);
+      setSampleStatus(await getSampleDataStatus(token));
+      setSuccess("Sample data removed.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not clear sample data");
+    } finally {
+      setSampleBusy(false);
+    }
+  };
 
   const handleManageBilling = async () => {
     if (!token) return;
@@ -154,6 +200,48 @@ export default function SettingsPage() {
             </div>
           ) : (
             <p className="mt-4 text-sm text-slate-500">Loading…</p>
+          )}
+        </section>
+
+        {/* Sample data */}
+        <section className="glass-panel p-6">
+          <h2 className="text-base font-semibold text-slate-50">Sample data</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Use the demo dataset to explore the dashboard, insights, and budgets without
+            uploading real receipts. All sample receipts are tagged with{" "}
+            <span className="font-mono text-slate-300">&quot;Sample —&quot;</span> and can be
+            removed any time without touching your own uploads.
+          </p>
+
+          {sampleStatus === null ? (
+            <p className="mt-4 text-sm text-slate-500">Loading…</p>
+          ) : sampleStatus.loaded ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-300">
+                <span className="font-mono text-emerald-300">{sampleStatus.count}</span> sample
+                receipts currently loaded.
+              </p>
+              <button
+                type="button"
+                disabled={sampleBusy}
+                onClick={handleClearSamples}
+                className="rounded-xl border border-red-500/40 bg-red-950/30 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-950/50 disabled:opacity-50"
+              >
+                {sampleBusy ? "Removing…" : "Remove sample data"}
+              </button>
+            </div>
+          ) : (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-400">No sample data loaded.</p>
+              <button
+                type="button"
+                disabled={sampleBusy}
+                onClick={handleLoadSamples}
+                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10 disabled:opacity-50"
+              >
+                {sampleBusy ? "Loading…" : "Load sample data"}
+              </button>
+            </div>
           )}
         </section>
 

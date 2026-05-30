@@ -49,21 +49,23 @@ Be conservative: if a field is unclear, use null. Do not invent data."""
 _RESPONSE_SCHEMA: dict = {
     "type": "object",
     "properties": {
-        "store_name": {"type": ["string", "null"]},
-        "receipt_date": {"type": ["string", "null"]},
-        "currency": {"type": ["string", "null"]},
-        "total_amount": {"type": ["number", "null"]},
-        "tax_amount": {"type": ["number", "null"]},
-        "detected_language": {"type": ["string", "null"]},
-        "raw_text": {"type": "string"},
+        # google-genai uses Google's Schema proto, not JSON Schema. Union
+        # types ("string" | "null") aren't supported — use nullable: True.
+        "store_name":        {"type": "string", "nullable": True},
+        "receipt_date":      {"type": "string", "nullable": True},
+        "currency":          {"type": "string", "nullable": True},
+        "total_amount":      {"type": "number", "nullable": True},
+        "tax_amount":        {"type": "number", "nullable": True},
+        "detected_language": {"type": "string", "nullable": True},
+        "raw_text":          {"type": "string"},
         "items": {
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
-                    "item_name": {"type": "string"},
-                    "quantity": {"type": ["number", "null"]},
-                    "unit_price": {"type": ["number", "null"]},
+                    "item_name":  {"type": "string"},
+                    "quantity":   {"type": "number", "nullable": True},
+                    "unit_price": {"type": "number", "nullable": True},
                     "item_price": {"type": "number"},
                 },
                 "required": ["item_name", "item_price"],

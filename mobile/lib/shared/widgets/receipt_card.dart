@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../features/receipts/models/receipt.dart';
 import '../../shared/utils/currency_formatter.dart';
 import '../../shared/utils/date_formatter.dart';
+import 'receipt_thumbnail.dart';
 import 'status_badge.dart';
 
 class ReceiptCard extends StatelessWidget {
@@ -22,15 +23,7 @@ class ReceiptCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(Icons.receipt_long, color: theme.colorScheme.onPrimaryContainer),
-              ),
+              ReceiptThumbnail(receiptId: receipt.id, size: 48),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

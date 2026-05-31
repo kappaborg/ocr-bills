@@ -12,7 +12,9 @@ class Endpoints {
   static const receipts = '/receipts';
   static String receiptById(int id) => '/receipts/$id';
   static String receiptImage(int id) => '/receipts/$id/image';
+  static String receiptThumbnail(int id) => '/receipts/$id/thumbnail';
   static String receiptConfirm(int id) => '/receipts/$id/confirm';
+  static String receiptEvents(int id) => '/receipts/$id/events';
 
   // Transactions
   static const transactions = '/transactions';

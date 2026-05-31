@@ -10,6 +10,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../features/receipts/data/receipts_repository.dart';
 import '../../../features/receipts/providers/receipts_provider.dart';
+import '../../../shared/widgets/quota_dialog.dart';
 import 'widgets/camera_overlay.dart';
 
 class ScannerScreen extends ConsumerStatefulWidget {
@@ -136,9 +137,11 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> with WidgetsBindi
         context.push('/receipt/$receiptId');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red));
-      }
+      if (!mounted) return;
+      // Quota hit (402) gets its own dialog instead of a generic snackbar.
+      final handled = await handleQuotaError(context, e);
+      if (handled || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red));
     }
   }
 

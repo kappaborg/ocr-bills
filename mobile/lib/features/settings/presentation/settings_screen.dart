@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/theme/theme_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -78,6 +79,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: () => context.push('/export'),
           ),
           const Divider(),
+          _ThemeTile(),
+          const Divider(),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text('Change Password', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
@@ -111,6 +114,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: _logout,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ThemeTile extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+    return ListTile(
+      leading: Icon(switch (mode) {
+        ThemeMode.light  => Icons.light_mode_outlined,
+        ThemeMode.dark   => Icons.dark_mode_outlined,
+        ThemeMode.system => Icons.brightness_auto_outlined,
+      }),
+      title: const Text('Theme'),
+      subtitle: Text(switch (mode) {
+        ThemeMode.light  => 'Light',
+        ThemeMode.dark   => 'Dark',
+        ThemeMode.system => 'Match system',
+      }),
+      trailing: SegmentedButton<ThemeMode>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+        segments: const [
+          ButtonSegment(value: ThemeMode.light,  icon: Icon(Icons.light_mode_outlined, size: 18)),
+          ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.brightness_auto_outlined, size: 18)),
+          ButtonSegment(value: ThemeMode.dark,   icon: Icon(Icons.dark_mode_outlined, size: 18)),
+        ],
+        selected: {mode},
+        onSelectionChanged: (s) => ref.read(themeModeProvider.notifier).set(s.first),
       ),
     );
   }

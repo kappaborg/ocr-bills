@@ -34,8 +34,10 @@ out/
 # Claude local config
 .claude/
 
-# Receipt image dataset and archives (large, not part of source code)
-receipts/
+# Receipt image dataset and archives (large, not part of source code).
+# Anchored to the repo root so we don't accidentally ignore source
+# directories named "receipts" (e.g. mobile/lib/features/receipts/).
+/receipts/
 *.zip
 
 # Misc

@@ -20,13 +20,15 @@ def list_insights(db: Session = Depends(get_db), user=Depends(get_current_user))
     last_7 = now - timedelta(days=7)
     prev_7 = now - timedelta(days=14)
 
-    # Frequency: item_name count in last 30 days.
+    # Frequency: item_name count in last 30 days. Use coalesce so undated
+    # receipts (Gemini failed to parse date) still count toward frequency.
+    freq_effective_date = func.coalesce(Receipt.receipt_date, Receipt.created_at)
     freq_q = (
         db.query(ReceiptItem.item_name, func.count(ReceiptItem.id))
         .join(Receipt, ReceiptItem.receipt_id == Receipt.id)
         .filter(Receipt.user_id == user.id)
         .filter(Receipt.processing_status == ReceiptStatus.confirmed.value)
-        .filter(Receipt.receipt_date >= last_30)
+        .filter(freq_effective_date >= last_30)
         .group_by(ReceiptItem.item_name)
         .order_by(func.count(ReceiptItem.id).desc())
         .limit(10)
@@ -47,16 +49,20 @@ def list_insights(db: Session = Depends(get_db), user=Depends(get_current_user))
             break
 
     # Spending spike: compare last 7 days vs previous 7 days.
+    # Fall back to created_at when receipt_date is null — Gemini sometimes
+    # can't parse the date on receipts with non-ISO date formats (Bosnian
+    # DD.MM.YYYY etc.). Without the coalesce these receipts vanish from
+    # totals entirely, leaving insights showing $0.00.
+    effective_date = func.coalesce(Receipt.receipt_date, Receipt.created_at)
     sum_q = (
         db.query(func.sum(ReceiptItem.item_price))
         .join(Receipt, ReceiptItem.receipt_id == Receipt.id)
         .filter(Receipt.user_id == user.id)
         .filter(Receipt.processing_status == ReceiptStatus.confirmed.value)
-        .filter(Receipt.receipt_date.isnot(None))
     )
 
-    current_total = sum_q.filter(Receipt.receipt_date >= last_7).scalar() or 0.0
-    previous_total = sum_q.filter(Receipt.receipt_date >= prev_7, Receipt.receipt_date < last_7).scalar() or 0.0
+    current_total = sum_q.filter(effective_date >= last_7).scalar() or 0.0
+    previous_total = sum_q.filter(effective_date >= prev_7, effective_date < last_7).scalar() or 0.0
 
     if previous_total > 0 and current_total > previous_total * 1.2:
         insights.append(
@@ -264,17 +270,44 @@ def list_insights(db: Session = Depends(get_db), user=Depends(get_current_user))
         )
 
     if not insights:
-        # Baseline insight
-        total_30 = sum_q.filter(Receipt.receipt_date >= last_30).scalar() or 0.0
-        insights.append(
-            InsightOut(
-                id=-3,
-                type="info",
-                message=f"Your total spending in the last 30 days is {total_30:.2f}.",
-                metadata_json={"total_30": total_30},
-                created_at=now,
+        # Baseline insight — same coalesce so undated receipts still count.
+        # If the rolling 30-day window is empty but the user actually has
+        # confirmed receipts (just older than 30 days), fall back to the
+        # all-time total. Otherwise a user who just scanned a 6-week-old
+        # receipt would see "spending: 0.00" and think the app is broken.
+        total_30 = sum_q.filter(effective_date >= last_30).scalar() or 0.0
+        if total_30 > 0:
+            insights.append(
+                InsightOut(
+                    id=-3,
+                    type="info",
+                    message=f"Your total spending in the last 30 days is {total_30:.2f}.",
+                    metadata_json={"total_30": total_30, "window": "30d"},
+                    created_at=now,
+                )
             )
-        )
+        else:
+            total_all = sum_q.scalar() or 0.0
+            if total_all > 0:
+                insights.append(
+                    InsightOut(
+                        id=-3,
+                        type="info",
+                        message=f"Your total spending across all receipts is {total_all:.2f}. (Nothing in the last 30 days.)",
+                        metadata_json={"total_all": total_all, "window": "all"},
+                        created_at=now,
+                    )
+                )
+            else:
+                insights.append(
+                    InsightOut(
+                        id=-3,
+                        type="info",
+                        message="No confirmed receipts yet — scan one to see insights.",
+                        metadata_json={"window": "empty"},
+                        created_at=now,
+                    )
+                )
 
     return {"results": insights}
 

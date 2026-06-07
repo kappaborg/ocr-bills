@@ -81,7 +81,14 @@ class _ReceiptConfirmScreenState extends ConsumerState<ReceiptConfirmScreen> {
     }
     if (mounted) {
       ref.invalidate(receiptsListProvider);
-      context.pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Receipt confirmed'), duration: Duration(seconds: 2)),
+      );
+      // Pop with `true` so the detail screen knows to reload its local state
+      // (so the "Review & Confirm Items" button disappears and items show).
+      // Without this, the stale local _receipt still claims `isParsed` and
+      // the user can re-tap Confirm — which would double-bump inventory.
+      context.pop(true);
     }
   }
 

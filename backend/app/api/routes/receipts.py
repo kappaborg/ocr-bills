@@ -844,6 +844,11 @@ def confirm_receipt(
 ):
     receipt = _load_receipt(receipt_id, user.id, db)
 
+    # Track whether this is the first confirmation so we only update the
+    # inventory once per receipt. Re-confirming (e.g. user edited an item
+    # name) must not double-count purchase_count or skew avg_interval_days.
+    was_already_confirmed = receipt.processing_status == ReceiptStatus.confirmed.value
+
     categories = db.query(Category).filter(Category.user_id.is_(None)).all()
     categories_by_name = {c.name: c for c in categories}
     uncategorized = categories_by_name.get("Uncategorized")
@@ -871,8 +876,9 @@ def confirm_receipt(
     db.commit()
     db.refresh(receipt)
 
-    from app.services.inventory_update import update_inventory_for_receipt
-    update_inventory_for_receipt(receipt, db)
+    if not was_already_confirmed:
+        from app.services.inventory_update import update_inventory_for_receipt
+        update_inventory_for_receipt(receipt, db)
 
     # Drop the cached user-context so the next OCR call sees this freshly
     # confirmed receipt in the user's history.

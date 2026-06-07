@@ -227,7 +227,13 @@ class _ReceiptDetailScreenState extends ConsumerState<ReceiptDetailScreen> {
 
             if (r.isParsed)
               FilledButton.icon(
-                onPressed: () => context.push('/receipt/${r.id}/confirm'),
+                onPressed: () async {
+                  // Await the confirm screen so we can refresh our local
+                  // state when it pops back — otherwise the button stays
+                  // visible and a re-tap would re-confirm + re-bump inventory.
+                  final didConfirm = await context.push<bool>('/receipt/${r.id}/confirm');
+                  if (didConfirm == true && mounted) _load();
+                },
                 icon: const Icon(Icons.check_circle_outline),
                 label: const Text('Review & Confirm Items'),
               ),

@@ -36,8 +36,14 @@ class ReceiptListSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // shrinkWrap + NeverScrollable so this works whether the parent gives us
+    // bounded height (full-screen list) or unbounded (nested inside the
+    // dashboard's Column/SingleChildScrollView). Without it the dashboard
+    // throws "Vertical viewport was given unbounded height" on empty state.
     return ListView.separated(
       padding: const EdgeInsets.all(16),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: 6,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (_, __) => const LoadingSkeleton(height: 80),

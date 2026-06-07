@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
@@ -38,6 +39,24 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
+    await SecureStorage.deleteToken();
+  }
+
+  /// GDPR-style export — returns the full user data dump as a JSON string
+  /// for the caller to save / share. Backend returns the dump as the
+  /// response body of GET /auth/me/export.
+  Future<String> exportMyData() async {
+    final res = await _api.dio.get<dynamic>(
+      Endpoints.meExport,
+      options: Options(responseType: ResponseType.plain),
+    );
+    return res.data.toString();
+  }
+
+  /// Permanently delete the current user account + all their data.
+  /// Caller should clear the local token afterwards (cascades to logout).
+  Future<void> deleteAccount() async {
+    await _api.delete(Endpoints.meDelete);
     await SecureStorage.deleteToken();
   }
 }

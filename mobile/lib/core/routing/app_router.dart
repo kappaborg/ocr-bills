@@ -5,9 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import '../../features/billing/presentation/pricing_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/dashboard/presentation/insights_screen.dart';
 import '../../features/inventory/presentation/inventory_screen.dart';
+import '../../features/onboarding/presentation/onboarding_screen.dart';
+import '../../features/onboarding/providers/onboarded_provider.dart';
 import '../../features/receipts/presentation/receipt_confirm_screen.dart';
 import '../../features/receipts/presentation/receipt_detail_screen.dart';
 import '../../features/receipts/presentation/receipts_list_screen.dart';
@@ -22,22 +25,35 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: authListenable,
     redirect: (context, state) {
       final authState = ref.read(authProvider);
+      final onboarded = ref.read(onboardedProvider);
       final isLoading = authState.isLoading;
       final isAuth = authState.valueOrNull != null;
       final loc = state.uri.toString();
 
       if (isLoading) return '/splash';
       if (!isAuth && loc != '/login' && loc != '/register') return '/login';
-      if (isAuth && (loc == '/login' || loc == '/register' || loc == '/splash')) return '/home/dashboard';
+      // Once we're signed in, route through onboarding first-time. Skip the
+      // redirect while the flag is still hydrating (null) — otherwise we'd
+      // flash the onboarding screen before getOnboarded() resolves.
+      if (isAuth && onboarded == false && loc != '/onboarding') return '/onboarding';
+      if (isAuth && onboarded == true && (loc == '/login' || loc == '/register' || loc == '/splash' || loc == '/onboarding')) {
+        return '/home/dashboard';
+      }
+      if (isAuth && (loc == '/login' || loc == '/register' || loc == '/splash') && onboarded == null) {
+        // Hydrating — show splash rather than bouncing the user around.
+        return '/splash';
+      }
       return null;
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const _SplashScreen()),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
+      GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingScreen()),
       GoRoute(path: '/insights', builder: (_, __) => const InsightsScreen()),
       GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
       GoRoute(path: '/export', builder: (_, __) => const ExportScreen()),
+      GoRoute(path: '/pricing', builder: (_, __) => const PricingScreen()),
       GoRoute(
         path: '/receipt/:id',
         builder: (_, state) => ReceiptDetailScreen(receiptId: int.parse(state.pathParameters['id']!)),
@@ -66,6 +82,9 @@ class _AuthListenable extends ChangeNotifier {
   final Ref _ref;
   _AuthListenable(this._ref) {
     _ref.listen(authProvider, (_, __) => notifyListeners());
+    // Also bounce the router whenever the onboarded flag flips so the
+    // redirect above re-runs after the wizard completes.
+    _ref.listen(onboardedProvider, (_, __) => notifyListeners());
   }
 }
 

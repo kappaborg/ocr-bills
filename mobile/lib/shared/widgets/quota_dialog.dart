@@ -46,8 +46,7 @@ Future<bool> handleQuotaError(BuildContext context, Object error) async {
         FilledButton(
           onPressed: () {
             Navigator.pop(ctx);
-            // Settings hosts the upgrade flow on mobile.
-            context.go('/settings');
+            context.push('/pricing');
           },
           child: const Text('See plans'),
         ),

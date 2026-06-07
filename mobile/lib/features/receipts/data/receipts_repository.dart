@@ -42,6 +42,17 @@ class ReceiptsRepository {
     return list.map((e) => Receipt.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  /// Backend-side multi-token AND search across raw_text / store / items.
+  /// Returns up to 50 receipts; empty query returns []. Mirrors the web
+  /// /receipts/search endpoint.
+  Future<List<Receipt>> searchReceipts(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return [];
+    final res = await _api.get(Endpoints.receiptsSearch, queryParameters: {'q': q});
+    final list = (res.data['results'] as List<dynamic>);
+    return list.map((e) => Receipt.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<Receipt> getReceipt(int id) async {
     final res = await _api.get(Endpoints.receiptById(id));
     return Receipt.fromJson(res.data as Map<String, dynamic>);
@@ -100,6 +111,14 @@ class ReceiptsRepository {
   String receiptImageUrl(int id) => '${_api.dio.options.baseUrl}${Endpoints.receiptImage(id)}';
 
   String receiptThumbnailUrl(int id) => '${_api.dio.options.baseUrl}${Endpoints.receiptThumbnail(id)}';
+
+  /// Seed the user's account with 7 curated sample receipts + 2 budgets so a
+  /// brand-new dashboard isn't empty. Backend is idempotent — re-calling
+  /// returns {already_loaded: true} instead of inserting duplicates.
+  Future<Map<String, dynamic>> seedSampleReceipts() async {
+    final res = await _api.post(Endpoints.receiptsSamples);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
 
   /// Subscribe to the backend's SSE stream for a single receipt's processing
   /// status. Yields one event per status transition; closes when terminal or

@@ -3,6 +3,8 @@ class Endpoints {
   static const register = '/auth/register';
   static const login = '/auth/login';
   static const me = '/auth/me';
+  static const meExport = '/auth/me/export';
+  static const meDelete = '/auth/me';
   static const profile = '/auth/profile';
 
   // Receipts
@@ -10,6 +12,8 @@ class Endpoints {
   static const receiptsLivePreview = '/receipts/live-preview';
   static const receiptsFromFrame = '/receipts/from-frame';
   static const receipts = '/receipts';
+  static const receiptsSearch = '/receipts/search';
+  static const receiptsSamples = '/receipts/samples';
   static String receiptById(int id) => '/receipts/$id';
   static String receiptImage(int id) => '/receipts/$id/image';
   static String receiptThumbnail(int id) => '/receipts/$id/thumbnail';

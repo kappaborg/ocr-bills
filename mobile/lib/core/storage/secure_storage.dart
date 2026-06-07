@@ -20,4 +20,19 @@ class SecureStorage {
       _storage.write(key: _themeKey, value: value);
 
   static Future<String?> getTheme() => _storage.read(key: _themeKey);
+
+  static const _onboardedKey = 'onboarded_v1';
+  static const _displayCurrencyKey = 'display_currency';
+
+  static Future<bool> getOnboarded() async =>
+      (await _storage.read(key: _onboardedKey)) == '1';
+
+  static Future<void> setOnboarded() =>
+      _storage.write(key: _onboardedKey, value: '1');
+
+  static Future<String?> getDisplayCurrency() =>
+      _storage.read(key: _displayCurrencyKey);
+
+  static Future<void> saveDisplayCurrency(String code) =>
+      _storage.write(key: _displayCurrencyKey, value: code);
 }

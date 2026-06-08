@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/preferences/display_currency_provider.dart';
 import '../../../shared/widgets/loading_skeleton.dart';
 import '../../../shared/widgets/receipt_card.dart';
 import '../../billing/data/billing_repository.dart';
@@ -19,6 +20,7 @@ class DashboardScreen extends ConsumerWidget {
     final spendingAsync = ref.watch(spendingByCategoryProvider);
     final receiptsAsync = ref.watch(receiptsListProvider);
     final billingAsync = ref.watch(billingMeProvider);
+    final displayCcy = ref.watch(displayCurrencyProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -50,8 +52,8 @@ class DashboardScreen extends ConsumerWidget {
                   final color = b.plan == 'free'
                       ? theme.colorScheme.surfaceContainerHighest
                       : b.plan == 'pro'
-                          ? theme.colorScheme.primary.withOpacity(0.15)
-                          : theme.colorScheme.tertiary.withOpacity(0.15);
+                          ? theme.colorScheme.primary.withValues(alpha:0.15)
+                          : theme.colorScheme.tertiary.withValues(alpha:0.15);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Container(
@@ -65,7 +67,7 @@ class DashboardScreen extends ConsumerWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.onSurface.withOpacity(0.08),
+                              color: theme.colorScheme.onSurface.withValues(alpha:0.08),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
@@ -116,7 +118,7 @@ class DashboardScreen extends ConsumerWidget {
                               children: [
                                 Text('Total Spending', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
                                 const SizedBox(height: 4),
-                                Text(total.toStringAsFixed(2), style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onPrimaryContainer)),
+                                Text('${total.toStringAsFixed(2)} $displayCcy', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onPrimaryContainer)),
                               ],
                             ),
                           ),

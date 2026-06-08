@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/preferences/display_currency_provider.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -176,6 +177,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: _loading ? null : _seedSamples,
           ),
           const Divider(),
+          _CurrencyTile(),
+          const Divider(),
           _ThemeTile(),
           const Divider(),
           Padding(
@@ -228,6 +231,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: _logout,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CurrencyTile extends ConsumerWidget {
+  static const _currencies = ['BAM', 'EUR', 'USD', 'GBP', 'TRY', 'RUB'];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final current = ref.watch(displayCurrencyProvider);
+    return ListTile(
+      leading: const Icon(Icons.attach_money_outlined),
+      title: const Text('Display currency'),
+      subtitle: const Text('Used for dashboard totals'),
+      trailing: DropdownButton<String>(
+        value: _currencies.contains(current) ? current : _currencies.first,
+        underline: const SizedBox.shrink(),
+        items: _currencies
+            .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+            .toList(),
+        onChanged: (v) {
+          if (v != null) ref.read(displayCurrencyProvider.notifier).set(v);
+        },
       ),
     );
   }

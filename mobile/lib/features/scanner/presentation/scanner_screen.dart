@@ -145,6 +145,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> with WidgetsBindi
     }
   }
 
+  /// Single-pick: existing flow (one image → /receipts/from-frame → detail).
   Future<void> _pickFromGallery() async {
     final picker = ImagePicker();
     final xFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
@@ -152,6 +153,33 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> with WidgetsBindi
     setState(() => _uploading = true);
     try {
       await _uploadFile(File(xFile.path));
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  /// Multi-pick: select N images and hit /receipts/upload with the array.
+  /// Mirrors the web /upload page. Pushed via long-press on the gallery
+  /// button so single-pick stays the default tap.
+  Future<void> _pickBatchFromGallery() async {
+    final picker = ImagePicker();
+    final files = await picker.pickMultiImage(imageQuality: 85);
+    if (files.isEmpty) return;
+    setState(() => _uploading = true);
+    try {
+      final repo = ref.read(receiptsRepositoryProvider);
+      final ids = await repo.uploadFiles(files.map((f) => File(f.path)).toList());
+      if (!mounted) return;
+      ref.invalidate(receiptsListProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Uploaded ${ids.length} receipts — processing in the background.')),
+      );
+      context.go('/home/receipts');
+    } catch (e) {
+      if (!mounted) return;
+      final handled = await handleQuotaError(context, e);
+      if (handled || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -197,9 +225,17 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> with WidgetsBindi
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        IconButton(
-                          icon: const Icon(Icons.photo_library, color: Colors.white, size: 32),
-                          onPressed: _uploading ? null : _pickFromGallery,
+                        // Tap = single pick; long-press = batch pick. The
+                        // tooltip teaches the gesture without cluttering the UI.
+                        GestureDetector(
+                          onLongPress: _uploading ? null : _pickBatchFromGallery,
+                          child: Tooltip(
+                            message: 'Pick one — hold for batch',
+                            child: IconButton(
+                              icon: const Icon(Icons.photo_library, color: Colors.white, size: 32),
+                              onPressed: _uploading ? null : _pickFromGallery,
+                            ),
+                          ),
                         ),
                         GestureDetector(
                           onTap: _uploading ? null : _capture,

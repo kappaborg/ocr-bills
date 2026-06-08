@@ -100,7 +100,6 @@ class _ReceiptConfirmScreenState extends ConsumerState<ReceiptConfirmScreen> {
   @override
   Widget build(BuildContext context) {
     final confirming = ref.watch(confirmReceiptProvider).isLoading;
-    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -144,11 +143,7 @@ class _ReceiptConfirmScreenState extends ConsumerState<ReceiptConfirmScreen> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            'Items total: ${formatAmount(_itemsSum, _receipt!.currency)}',
-                            style: theme.textTheme.bodySmall,
-                            textAlign: TextAlign.center,
-                          ),
+                          child: _TotalsBreakdown(receipt: _receipt!, itemsSum: _itemsSum),
                         ),
                         FilledButton.icon(
                           onPressed: confirming ? null : _confirm,
@@ -167,6 +162,43 @@ class _ReceiptConfirmScreenState extends ConsumerState<ReceiptConfirmScreen> {
   }
 }
 
+/// Three-line summary above the Confirm button: items subtotal, tax (if
+/// any), receipt total. Makes the "items + tax = total" relationship
+/// obvious so the user doesn't think they need to manually add tax.
+class _TotalsBreakdown extends StatelessWidget {
+  final Receipt receipt;
+  final double itemsSum;
+  const _TotalsBreakdown({required this.receipt, required this.itemsSum});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tax = receipt.taxAmount ?? 0;
+    final total = receipt.totalAmount ?? 0;
+    final ccy = receipt.currency;
+
+    TableRow row(String label, String value, {bool bold = false}) => TableRow(children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(label, style: bold ? theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold) : theme.textTheme.bodySmall),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(value, textAlign: TextAlign.right, style: bold ? theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold) : theme.textTheme.bodySmall),
+          ),
+        ]);
+
+    return Table(
+      columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1)},
+      children: [
+        row('Items subtotal', formatAmount(itemsSum, ccy)),
+        if (tax > 0) row('Tax', formatAmount(tax, ccy)),
+        if (total > 0) row('Receipt total', formatAmount(total, ccy), bold: true),
+      ],
+    );
+  }
+}
+
 class _SumMismatchBanner extends StatelessWidget {
   final Receipt receipt;
   final double itemsSum;
@@ -176,11 +208,21 @@ class _SumMismatchBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = receipt.totalAmount ?? 0;
     if (total <= 0 || itemsSum <= 0) return const SizedBox.shrink();
-    final delta = (total - itemsSum).abs();
+
+    // Receipts usually have tax as a separate line on the printout, so the
+    // items subtotal naturally undershoots the total by exactly the tax
+    // amount. Treat items + tax as the expected number; only complain when
+    // that still doesn't match.
+    final tax = receipt.taxAmount ?? 0;
+    final expected = itemsSum + tax;
+    final delta = (total - expected).abs();
     final ratio = delta / total;
     if (ratio <= 0.01) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
+    final breakdown = tax > 0
+        ? "${formatAmount(itemsSum, receipt.currency)} items + ${formatAmount(tax, receipt.currency)} tax"
+        : formatAmount(itemsSum, receipt.currency);
     return Container(
       width: double.infinity,
       color: Colors.amber.withValues(alpha: 0.15),
@@ -191,8 +233,8 @@ class _SumMismatchBanner extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              "Items don't add up to the receipt total "
-              "(${formatAmount(itemsSum, receipt.currency)} vs ${formatAmount(total, receipt.currency)}). "
+              "Items + tax don't match the receipt total "
+              "($breakdown vs ${formatAmount(total, receipt.currency)}). "
               "Check the highlighted lines.",
               style: theme.textTheme.bodySmall,
             ),

@@ -561,7 +561,11 @@ export default function ReceiptReviewPage() {
             {(() => {
               const sumItems = editItems.reduce((s, it) => s + (it.item_price || 0), 0);
               const totalAmt = receipt.total_amount ?? 0;
-              const sumDelta = Math.abs(sumItems - totalAmt);
+              // Receipts list tax separately, so items naturally undershoot
+              // the total by the tax amount. Compare items + tax to total —
+              // only flag when the breakdown still doesn't reconcile.
+              const taxAmt = receipt.tax_amount ?? 0;
+              const sumDelta = Math.abs((sumItems + taxAmt) - totalAmt);
               const sumMismatch = totalAmt > 0 && (sumDelta / totalAmt) > 0.01;
 
               const buckets = editItems.map(itemConfidence);
@@ -598,12 +602,13 @@ export default function ReceiptReviewPage() {
 
                   {sumMismatch && (
                     <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
-                      <p className="font-medium">Items don&apos;t add up to the receipt total.</p>
+                      <p className="font-medium">Items + tax don&apos;t match the receipt total.</p>
                       <p className="mt-1 text-xs text-amber-300/80">
-                        Items sum to {formatCurrency(sumItems, receipt.currency)} but the receipt
-                        total is {formatCurrency(totalAmt, receipt.currency)} — off by{" "}
+                        {formatCurrency(sumItems, receipt.currency)} items
+                        {taxAmt > 0 && <> + {formatCurrency(taxAmt, receipt.currency)} tax</>}
+                        {" "}vs receipt total {formatCurrency(totalAmt, receipt.currency)} — off by{" "}
                         <span className="font-mono">{formatCurrency(sumDelta, receipt.currency)}</span>.
-                        Likely the OCR missed an item or grabbed a tax line as one.
+                        Likely the OCR missed an item.
                       </p>
                     </div>
                   )}

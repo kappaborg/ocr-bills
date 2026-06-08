@@ -9,6 +9,7 @@ class Receipt {
   final DateTime? receiptDate;
   final String? storeName;
   final double? totalAmount;
+  final double? taxAmount;
   final String? currency;
   final List<ReceiptItem> items;
 
@@ -21,6 +22,7 @@ class Receipt {
     this.receiptDate,
     this.storeName,
     this.totalAmount,
+    this.taxAmount,
     this.currency,
     required this.items,
   });
@@ -34,6 +36,7 @@ class Receipt {
         receiptDate: json['receipt_date'] != null ? DateTime.tryParse(json['receipt_date'] as String) : null,
         storeName: json['store_name'] as String?,
         totalAmount: (json['total_amount'] as num?)?.toDouble(),
+        taxAmount: (json['tax_amount'] as num?)?.toDouble(),
         currency: json['currency'] as String?,
         items: (json['items'] as List<dynamic>? ?? []).map((e) => ReceiptItem.fromJson(e as Map<String, dynamic>)).toList(),
       );
@@ -48,6 +51,7 @@ class Receipt {
     String? processingError,
     String? storeName,
     double? totalAmount,
+    double? taxAmount,
     String? currency,
     List<ReceiptItem>? items,
   }) {
@@ -60,6 +64,7 @@ class Receipt {
       receiptDate: receiptDate,
       storeName: storeName ?? this.storeName,
       totalAmount: totalAmount ?? this.totalAmount,
+      taxAmount: taxAmount ?? this.taxAmount,
       currency: currency ?? this.currency,
       items: items ?? this.items,
     );

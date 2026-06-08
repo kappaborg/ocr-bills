@@ -43,7 +43,71 @@ Rules:
 - raw_text: a verbatim transcription of every legible word on the receipt,
   preserving line breaks
 
+Number formats — VERY IMPORTANT:
+- Bosnian / Serbian / Croatian / German / most-of-Europe receipts use a
+  COMMA as the decimal separator ("12,50 KM" means twelve and a half).
+  Dots in those locales are THOUSANDS separators ("1.234,56" means 1234.56,
+  NOT 1.234). US / UK / Japanese receipts are the opposite.
+- Always return numbers as canonical JSON: dot as decimal separator, no
+  thousands separator. So "12,50 KM" → 12.50 and "1.234,56" → 1234.56.
+- If you cannot decide which separator a dot/comma represents, prefer the
+  interpretation that matches the receipt's language: bs/sr/hr/de → comma
+  is decimal; en/ja → dot is decimal.
+- Never silently truncate. If you see "12,500" on a Bosnian receipt and
+  it appears in a TOTAL field, that almost certainly means 12.50 — not
+  twelve thousand five hundred. Cross-check against the item subtotal.
+
 Be conservative: if a field is unclear, use null. Do not invent data."""
+
+
+def _coerce_number(value) -> Optional[float]:
+    """Robust JSON-number coercion that tolerates Gemini occasionally
+    returning a locale-formatted string instead of a number.
+
+    Handles all of:
+      12.5         -> 12.5
+      "12.5"       -> 12.5
+      "12,5"       -> 12.5   (Bosnian / European decimal comma)
+      "1.234,56"   -> 1234.56 (European thousands dot + decimal comma)
+      "1,234.56"   -> 1234.56 (US thousands comma + decimal dot)
+      "12,5 KM"    -> 12.5   (strip trailing currency suffix)
+      None / ""    -> None
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip()
+    if not s:
+        return None
+    # Strip non-numeric suffix (currency code, symbols) — keep digits and separators.
+    import re
+    m = re.search(r"-?\d[\d.,]*", s)
+    if not m:
+        return None
+    s = m.group(0)
+    has_dot, has_comma = "." in s, "," in s
+    if has_dot and has_comma:
+        # Whichever appears LAST is the decimal separator.
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    elif has_comma:
+        # Lone comma → almost always decimal in Bosnian/EU receipts.
+        # But "1,234" with no dot could be thousands — ambiguous. Treat
+        # as decimal when there's exactly ONE comma and ≤3 digits follow.
+        comma_idx = s.rfind(",")
+        digits_after = len(s) - comma_idx - 1
+        if s.count(",") == 1 and digits_after in (1, 2):
+            s = s.replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    # has_dot only → already canonical
+    try:
+        return float(s)
+    except ValueError:
+        return None
 
 
 def _format_user_context(ctx) -> str:
@@ -188,33 +252,25 @@ class GeminiEngine(OCREngine):
             name = str(it.get("item_name", "")).strip()
             if not name:
                 continue
-            # Be defensive: Gemini occasionally returns "12.3A" or other
-            # non-numeric strings for amounts. Skip rather than crash the
-            # whole upload, which would block a paying user.
-            try:
-                price = float(it.get("item_price") or 0.0)
-            except (TypeError, ValueError):
+            # _coerce_number handles Bosnian/EU "12,50 KM" strings as well
+            # as canonical JSON numbers — Gemini ignores its own schema and
+            # emits strings occasionally on multi-language receipts.
+            price = _coerce_number(it.get("item_price"))
+            if price is None or price <= 0:
                 continue
-            if price <= 0:
-                continue
-            try:
-                qty = float(it["quantity"]) if it.get("quantity") is not None else None
-            except (TypeError, ValueError):
-                qty = None
-            try:
-                unit = float(it["unit_price"]) if it.get("unit_price") is not None else None
-            except (TypeError, ValueError):
-                unit = None
             items.append(StructuredItem(
-                item_name=name, quantity=qty, unit_price=unit, item_price=price,
+                item_name=name,
+                quantity=_coerce_number(it.get("quantity")),
+                unit_price=_coerce_number(it.get("unit_price")),
+                item_price=price,
             ))
 
         structured = StructuredReceipt(
             store_name=(data.get("store_name") or None),
             receipt_date=_parse_date(data.get("receipt_date")),
             currency=(data.get("currency") or "").upper() or None,
-            total_amount=data.get("total_amount"),
-            tax_amount=data.get("tax_amount"),
+            total_amount=_coerce_number(data.get("total_amount")),
+            tax_amount=_coerce_number(data.get("tax_amount")),
             detected_language=data.get("detected_language"),
             items=items,
         )

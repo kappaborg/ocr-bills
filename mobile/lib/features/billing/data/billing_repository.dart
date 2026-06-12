@@ -22,6 +22,14 @@ class BillingRepository {
     final res = await _api.get(Endpoints.billingPlans);
     return PlansResponse.fromJson(res.data as Map<String, dynamic>);
   }
+
+  /// Create a Stripe Checkout session for [planId] ("pro" | "business").
+  /// Returns the hosted checkout URL to open in a browser. Throws
+  /// AppException (503) when Stripe isn't configured on the server.
+  Future<String> createCheckout(String planId) async {
+    final res = await _api.post(Endpoints.billingCheckout, data: {'plan': planId});
+    return res.data['checkout_url'] as String;
+  }
 }
 
 final billingMeProvider = FutureProvider<BillingMe>((ref) {

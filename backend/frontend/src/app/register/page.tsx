@@ -122,6 +122,12 @@ export default function RegisterPage() {
           >
             {loading ? "Creating…" : "Create account"}
           </button>
+          <p className="text-center text-[11px] leading-relaxed text-slate-600">
+            By creating an account you agree to the{" "}
+            <Link href="/terms" className="text-slate-400 hover:underline">Terms of Service</Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="text-slate-400 hover:underline">Privacy Policy</Link>.
+          </p>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500">

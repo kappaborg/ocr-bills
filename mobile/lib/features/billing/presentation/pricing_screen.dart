@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/widgets/error_view.dart';
 import '../data/billing_repository.dart';
 import '../models/plan.dart';
 
-/// Pricing screen. UI-only for now — CTA buttons surface a "Mobile checkout
-/// coming soon" snackbar instead of opening Stripe Checkout. When you wire
-/// Stripe up later, just replace the onPressed body in [_PlanCard].
+/// Pricing screen. Upgrade buttons create a Stripe Checkout session and
+/// open the hosted page in the browser; the webhook flips the plan when
+/// payment completes. When Stripe isn't configured server-side
+/// (plans.configured == false) the buttons explain instead of failing.
 class PricingScreen extends ConsumerWidget {
   const PricingScreen({super.key});
 
@@ -37,6 +39,7 @@ class PricingScreen extends ConsumerWidget {
                     plan: plan,
                     currency: resp.currency,
                     isCurrent: plan.id == currentPlan,
+                    configured: resp.configured,
                   ),
                 ),
               const SizedBox(height: 12),
@@ -82,11 +85,51 @@ class _TrialBanner extends StatelessWidget {
   }
 }
 
-class _PlanCard extends StatelessWidget {
+class _PlanCard extends ConsumerStatefulWidget {
   final Plan plan;
   final String currency;
   final bool isCurrent;
-  const _PlanCard({required this.plan, required this.currency, required this.isCurrent});
+  final bool configured;
+  const _PlanCard({required this.plan, required this.currency, required this.isCurrent, required this.configured});
+
+  @override
+  ConsumerState<_PlanCard> createState() => _PlanCardState();
+}
+
+class _PlanCardState extends ConsumerState<_PlanCard> {
+  bool _busy = false;
+
+  Plan get plan => widget.plan;
+  String get currency => widget.currency;
+  bool get isCurrent => widget.isCurrent;
+
+  Future<void> _checkout() async {
+    if (!widget.configured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Billing is in setup mode — upgrades open soon.')),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final url = await ref.read(billingRepositoryProvider).createCheckout(plan.id);
+      final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open checkout — try again.'), backgroundColor: Colors.red),
+        );
+      }
+      // The Stripe webhook flips the plan when payment completes; refresh
+      // billing state when the user comes back to the app.
+      ref.invalidate(billingMeProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   String get _priceLabel {
     if (plan.priceCents == 0) return 'Free';
@@ -160,21 +203,15 @@ class _PlanCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                // Mobile Stripe Checkout will land later — for now we just
-                // surface a "coming soon" so the screen is functional. When
-                // wiring it, replace this with a call to /billing/checkout
-                // and launch the returned URL in url_launcher / in-app browser.
-                onPressed: (isCurrent || plan.isFree)
-                    ? null
-                    : () => ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Mobile checkout coming soon — visit the web app to upgrade.')),
-                        ),
+                onPressed: (isCurrent || plan.isFree || _busy) ? null : _checkout,
                 style: FilledButton.styleFrom(backgroundColor: _isUpgrade ? accent : null),
-                child: Text(isCurrent
-                    ? 'You\'re on this plan'
-                    : plan.isFree
-                        ? 'Default plan'
-                        : 'Upgrade to ${plan.name}'),
+                child: _busy
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Text(isCurrent
+                        ? 'You\'re on this plan'
+                        : plan.isFree
+                            ? 'Default plan'
+                            : 'Upgrade to ${plan.name}'),
               ),
             ),
           ],

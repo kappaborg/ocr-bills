@@ -290,6 +290,10 @@ export default async function Landing() {
           <Link href="/pricing" className="hover:text-slate-400">Pricing</Link>
           {" · "}
           <Link href="/login" className="hover:text-slate-400">Sign in</Link>
+          {" · "}
+          <Link href="/privacy" className="hover:text-slate-400">Privacy</Link>
+          {" · "}
+          <Link href="/terms" className="hover:text-slate-400">Terms</Link>
         </p>
       </footer>
     </main>

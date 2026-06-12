@@ -42,11 +42,12 @@ const TABS: PrimaryTab[] = [
   {
     href: "/inventory",
     label: "Insights",
-    match: ["/inventory", "/need-to-buy", "/reconcile"],
+    match: ["/inventory", "/need-to-buy", "/shopping-list", "/reconcile"],
     sub: [
-      { href: "/inventory",   label: "Inventory",   hint: "Products you've bought" },
-      { href: "/need-to-buy", label: "Need to buy", hint: "Forecast restocks" },
-      { href: "/reconcile",   label: "Reconcile",   hint: "Match a bank CSV" },
+      { href: "/inventory",     label: "Inventory",     hint: "Products you've bought" },
+      { href: "/need-to-buy",   label: "Need to buy",   hint: "Forecast restocks" },
+      { href: "/shopping-list", label: "Shopping list", hint: "Grouped by cheapest store" },
+      { href: "/reconcile",     label: "Reconcile",     hint: "Match a bank CSV" },
     ],
   },
 ];

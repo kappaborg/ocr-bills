@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/api_client.dart';
@@ -85,7 +86,16 @@ class InventoryScreen extends ConsumerWidget {
     final needToBuyAsync = ref.watch(needToBuyProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Inventory')),
+      appBar: AppBar(
+        title: const Text('Inventory'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.shopping_cart_checkout_outlined),
+            tooltip: 'Shopping list',
+            onPressed: () => context.push('/shopping-list'),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(inventoryProvider);

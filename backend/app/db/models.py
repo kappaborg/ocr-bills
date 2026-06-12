@@ -9,6 +9,7 @@ def _utcnow() -> datetime:
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Enum,
     Float,
@@ -221,6 +222,26 @@ class ClientEvent(Base):
     store: Mapped[str] = mapped_column(String(255), nullable=True)
     product: Mapped[str] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+
+
+class ShoppingListItem(Base):
+    """
+    One entry on the user's single active shopping list. No separate lists
+    table in v1 — "the list" is implicit per user. Checked items stay until
+    explicitly cleared so the user can review what they bought.
+    """
+
+    __tablename__ = "shopping_list_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
+    product_name: Mapped[str] = mapped_column(String(255))
+    product_normalized: Mapped[str] = mapped_column(String(255), index=True)
+    quantity: Mapped[float] = mapped_column(Float, default=1.0)
+    checked: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str] = mapped_column(String(32), default="manual")  # manual | need_to_buy
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
 
 class Budget(Base):

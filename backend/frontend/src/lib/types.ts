@@ -84,3 +84,13 @@ export type NeedToBuyItemOut = {
   price_options?: PriceOptionOut[];
 };
 
+export type ShoppingItemOut = {
+  id: number;
+  product_name: string;
+  quantity: number;
+  checked: boolean;
+  source: string;
+  created_at: string;
+  price_options?: PriceOptionOut[];
+};
+

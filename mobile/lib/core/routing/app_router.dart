@@ -17,6 +17,7 @@ import '../../features/receipts/presentation/receipts_list_screen.dart';
 import '../../features/scanner/presentation/scanner_screen.dart';
 import '../../features/settings/presentation/export_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/shopping_list/presentation/shopping_list_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authListenable = _AuthListenable(ref);
@@ -54,6 +55,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
       GoRoute(path: '/export', builder: (_, __) => const ExportScreen()),
       GoRoute(path: '/pricing', builder: (_, __) => const PricingScreen()),
+      GoRoute(path: '/shopping-list', builder: (_, __) => const ShoppingListScreen()),
       GoRoute(
         path: '/receipt/:id',
         builder: (_, state) => ReceiptDetailScreen(receiptId: int.parse(state.pathParameters['id']!)),

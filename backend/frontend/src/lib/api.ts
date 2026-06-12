@@ -1,4 +1,4 @@
-import { ReceiptOut, InsightOut, TransactionOut, InventoryItemOut, NeedToBuyItemOut } from "./types";
+import { ReceiptOut, InsightOut, TransactionOut, InventoryItemOut, NeedToBuyItemOut, ShoppingItemOut } from "./types";
 import { clearAccessToken } from "./auth";
 
 const API_BASE_URL =
@@ -329,6 +329,52 @@ export async function recordEvent(
     token,
     jsonBody: event,
   });
+}
+
+// ── Shopping list ──────────────────────────────────────────────────────────
+
+export async function getShoppingList(token: string): Promise<{ items: ShoppingItemOut[] }> {
+  return apiFetch<{ items: ShoppingItemOut[] }>("/shopping-list", { token });
+}
+
+export async function addShoppingItem(
+  token: string,
+  productName: string,
+  quantity: number = 1,
+): Promise<ShoppingItemOut> {
+  return apiFetch<ShoppingItemOut>("/shopping-list", {
+    method: "POST",
+    token,
+    jsonBody: { product_name: productName, quantity },
+  });
+}
+
+export async function addDueItemsToList(token: string): Promise<{ items: ShoppingItemOut[] }> {
+  return apiFetch<{ items: ShoppingItemOut[] }>("/shopping-list/from-need-to-buy", {
+    method: "POST",
+    token,
+    jsonBody: {},
+  });
+}
+
+export async function patchShoppingItem(
+  token: string,
+  id: number,
+  patch: { checked?: boolean; quantity?: number },
+): Promise<ShoppingItemOut> {
+  return apiFetch<ShoppingItemOut>(`/shopping-list/${id}`, {
+    method: "PATCH",
+    token,
+    jsonBody: patch,
+  });
+}
+
+export async function deleteShoppingItem(token: string, id: number): Promise<void> {
+  await apiFetch<void>(`/shopping-list/${id}`, { method: "DELETE", token });
+}
+
+export async function clearCheckedShoppingItems(token: string): Promise<void> {
+  await apiFetch<void>("/shopping-list/checked", { method: "DELETE", token });
 }
 
 export async function listCategories(): Promise<{ id: number; name: string }[]> {

@@ -87,4 +87,11 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
     CMD curl -fs http://127.0.0.1:${PORT}/health || exit 1
 
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+# --proxy-headers + trust-all forwarded IPs: behind HF Spaces' reverse proxy
+# every request otherwise appears to come from a handful of 10.20.x.x proxy
+# pods, which (a) makes logs useless for telling bots from users and
+# (b) lets one bot exhaust the per-IP login rate limit for everyone sharing
+# that proxy pod. With X-Forwarded-For honored, request.client.host becomes
+# the real client IP. Trusting '*' is safe here because the container port
+# is only reachable through HF's proxy.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips '*'"]

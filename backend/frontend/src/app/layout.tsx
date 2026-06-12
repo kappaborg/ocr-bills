@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 import { AppBackground } from "@/components/AppBackground";
 import { TopNav } from "@/components/TopNav";
@@ -18,9 +19,39 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://ocr-bills.vercel.app";
+
 export const metadata: Metadata = {
-  title: "ExTaSy — Expense Tracking System",
-  description: "Receipt OCR, multi-currency tracking, budgets, and spending insights",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "ExTaSy — Expense Tracking System",
+    template: "%s · ExTaSy",
+  },
+  description:
+    "Scan receipts in any language — Bosnian, Russian, Arabic, Japanese — and get perfectly parsed expenses. Multi-currency, budgets, recurring detection, bank reconciliation, accountant-ready exports.",
+  keywords: [
+    "receipt OCR", "expense tracking", "receipt scanner", "multi-currency",
+    "budget tracker", "bank reconciliation", "expense reports",
+  ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "ExTaSy",
+    title: "ExTaSy — Receipts you can actually read",
+    description:
+      "Snap a photo, get a perfectly parsed receipt — in any language. Budgets, recurring-expense detection, and accountant-ready exports built in.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ExTaSy — Receipts you can actually read",
+    description:
+      "Receipt OCR in any language. Multi-currency tracking, budgets, bank reconciliation, one-click exports.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
@@ -57,6 +88,7 @@ export default function RootLayout({
             </ConfirmProvider>
           </ToastProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );

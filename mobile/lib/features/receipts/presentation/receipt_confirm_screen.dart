@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/currency_formatter.dart';
+import '../../../shared/widgets/brand.dart';
 import '../models/receipt.dart';
 import '../models/receipt_item.dart';
 import '../providers/receipts_provider.dart';
@@ -145,12 +147,12 @@ class _ReceiptConfirmScreenState extends ConsumerState<ReceiptConfirmScreen> {
                           padding: const EdgeInsets.only(bottom: 8),
                           child: _TotalsBreakdown(receipt: _receipt!, itemsSum: _itemsSum),
                         ),
-                        FilledButton.icon(
+                        GradientButton(
                           onPressed: confirming ? null : _confirm,
                           icon: confirming
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Brand.slate950))
                               : const Icon(Icons.check),
-                          label: const Text('Confirm Receipt'),
+                          child: const Text('Confirm Receipt'),
                         ),
                       ],
                     ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../features/receipts/models/receipt.dart';
 import '../../shared/utils/currency_formatter.dart';
 import '../../shared/utils/date_formatter.dart';
+import 'brand.dart';
 import 'receipt_thumbnail.dart';
 import 'status_badge.dart';
 
@@ -47,9 +48,9 @@ class ReceiptCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
+                  MoneyText(
                     formatAmount(receipt.totalAmount, receipt.currency),
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                    fontSize: 14,
                   ),
                   const SizedBox(height: 4),
                   StatusBadge(receipt.processingStatus),

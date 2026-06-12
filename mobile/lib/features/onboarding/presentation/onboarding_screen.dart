@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/storage/secure_storage.dart';
+import '../../../shared/widgets/brand.dart';
 import '../../receipts/data/receipts_repository.dart';
 import '../../receipts/providers/receipts_provider.dart';
 import '../providers/onboarded_provider.dart';
@@ -113,20 +114,26 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           child: const Text('Back'),
                         ),
                       if (_step < 2)
-                        FilledButton(
-                          onPressed: _busy ? null : () => _go(_step + 1),
-                          child: const Text('Next'),
+                        SizedBox(
+                          width: 110,
+                          child: GradientButton(
+                            onPressed: _busy ? null : () => _go(_step + 1),
+                            child: const Text('Next'),
+                          ),
                         )
                       else ...[
                         OutlinedButton(
                           onPressed: _busy ? null : () => _finish(seedSamples: true),
                           child: const Text('Samples'),
                         ),
-                        FilledButton(
-                          onPressed: _busy ? null : () => _finish(),
-                          child: _busy
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Text('Start'),
+                        SizedBox(
+                          width: 110,
+                          child: GradientButton(
+                            onPressed: _busy ? null : () => _finish(),
+                            child: _busy
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Text('Start'),
+                          ),
                         ),
                       ],
                     ],

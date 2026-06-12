@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/brand.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -53,9 +55,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 48),
-                Icon(Icons.receipt_long, size: 72, color: theme.colorScheme.primary),
-                const SizedBox(height: 16),
-                Text('Receipt Scanner', textAlign: TextAlign.center, style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+                // Brand mark — gradient rounded square with the ◈ glyph,
+                // identical to the website's header logo.
+                Center(
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      gradient: Brand.ctaGradient,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(color: Brand.cyan.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 6)),
+                      ],
+                    ),
+                    child: const Center(
+                      child: Text('◈', style: TextStyle(fontSize: 34, color: Brand.slate950, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text.rich(
+                  TextSpan(children: [
+                    TextSpan(text: 'Ex', style: TextStyle(color: theme.colorScheme.onSurface)),
+                    const TextSpan(text: 'TaSy', style: TextStyle(color: Brand.cyan)),
+                  ]),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, letterSpacing: -0.5),
+                ),
                 Text('Sign in to your account', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
                 const SizedBox(height: 40),
                 TextFormField(
@@ -79,9 +105,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   validator: (v) => (v == null || v.length < 8) ? 'Password must be at least 8 characters' : null,
                 ),
                 const SizedBox(height: 24),
-                FilledButton(
+                GradientButton(
                   onPressed: _loading ? null : _submit,
-                  child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Sign In'),
+                  child: _loading
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Brand.slate950))
+                      : const Text('Sign In'),
                 ),
                 const SizedBox(height: 16),
                 TextButton(

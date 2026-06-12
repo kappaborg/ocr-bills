@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/preferences/display_currency_provider.dart';
+import '../../../shared/widgets/brand.dart';
 import '../../../shared/widgets/loading_skeleton.dart';
 import '../../../shared/widgets/receipt_card.dart';
 import '../../billing/data/billing_repository.dart';
@@ -24,7 +25,15 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SectionLabel('Overview'),
+            Text('Spending pulse', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          ],
+        ),
+        toolbarHeight: 68,
         actions: [
           IconButton(icon: const Icon(Icons.insights_outlined), onPressed: () => context.push('/insights')),
           IconButton(icon: const Icon(Icons.settings_outlined), onPressed: () => context.push('/settings')),
@@ -116,9 +125,17 @@ class DashboardScreen extends ConsumerWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Total Spending', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
+                                Text('TOTAL SPENDING',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                                      letterSpacing: 1.5,
+                                    )),
                                 const SizedBox(height: 4),
-                                Text('${total.toStringAsFixed(2)} $displayCcy', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onPrimaryContainer)),
+                                MoneyText(
+                                  '${total.toStringAsFixed(2)} $displayCcy',
+                                  fontSize: 28,
+                                  color: theme.colorScheme.onPrimaryContainer,
+                                ),
                               ],
                             ),
                           ),

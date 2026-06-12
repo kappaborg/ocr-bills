@@ -4,6 +4,7 @@ from app.api.routes import (
     auth,
     billing,
     budgets,
+    events,
     fx,
     households,
     insights,
@@ -29,4 +30,5 @@ router.include_router(budgets.router, prefix="/budgets", tags=["budgets"])
 router.include_router(households.router, prefix="/households", tags=["households"])
 router.include_router(reconcile.router, prefix="/reconcile", tags=["reconcile"])
 router.include_router(billing.router, prefix="/billing", tags=["billing"])
+router.include_router(events.router, prefix="/events", tags=["events"])
 

@@ -67,7 +67,9 @@ def need_to_buy(
     # Only for the visible head of the list — each lookup is a query.
     from app.services.price_lookup import price_options_for
     for r in results[:30]:
-        r["price_options"] = price_options_for(r.pop("_normalized"), db)
+        r["price_options"] = price_options_for(
+            r.pop("_normalized"), db, requesting_user_id=user.id,
+        )
     for r in results[30:]:
         r.pop("_normalized", None)
         r["price_options"] = []

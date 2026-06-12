@@ -320,6 +320,17 @@ export async function listNeedToBuy(
   );
 }
 
+export async function recordEvent(
+  token: string,
+  event: { kind: string; store?: string; product?: string },
+): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>("/events", {
+    method: "POST",
+    token,
+    jsonBody: event,
+  });
+}
+
 export async function listCategories(): Promise<{ id: number; name: string }[]> {
   return apiFetch<{ id: number; name: string }[]>("/meta/categories", {});
 }

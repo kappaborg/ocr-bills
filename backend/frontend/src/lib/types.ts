@@ -56,6 +56,11 @@ export type InventoryItemOut = {
   next_expected_buy_date?: string | null;
 };
 
+export type PriceActionOut = {
+  type: "maps" | "glovo" | "wolt" | "shop";
+  url: string;
+};
+
 export type PriceOptionOut = {
   store: string;
   store_display: string;
@@ -63,6 +68,10 @@ export type PriceOptionOut = {
   currency: string;
   observed_at: string;
   staleness_days: number;
+  observation_count?: number;
+  is_own?: boolean;
+  verified?: boolean;
+  action?: PriceActionOut | null;
 };
 
 export type NeedToBuyItemOut = {

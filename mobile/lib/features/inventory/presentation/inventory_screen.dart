@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/date_formatter.dart';
 import '../../../shared/widgets/error_view.dart';
@@ -8,34 +10,67 @@ import '../../../shared/widgets/loading_skeleton.dart';
 import '../models/inventory_item.dart';
 import '../providers/inventory_provider.dart';
 
-class _PriceChip extends StatelessWidget {
+class _PriceChip extends ConsumerWidget {
   final PriceOption option;
+  final String productName;
   final bool best;
-  const _PriceChip({required this.option, required this.best});
+  const _PriceChip({required this.option, required this.productName, required this.best});
+
+  Future<void> _open(BuildContext context, WidgetRef ref) async {
+    final url = option.actionUrl;
+    if (url == null) return;
+    // Fire-and-forget tap telemetry — never block or fail the navigation.
+    try {
+      ref.read(apiClientProvider).post('/events', data: {
+        'kind': 'price_chip_tap',
+        'store': option.store,
+        'product': productName,
+      });
+    } catch (_) {}
+    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open link')));
+    }
+  }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final accent = best ? Brand.emerald : Theme.of(context).colorScheme.outline;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: best ? Brand.emerald.withValues(alpha: 0.12) : Colors.transparent,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: accent.withValues(alpha: best ? 0.5 : 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(option.storeDisplay,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: best ? Brand.emerald : null)),
-          const SizedBox(width: 6),
-          Text('${option.price.toStringAsFixed(2)} ${option.currency}', style: AppTheme.moneyStyle.copyWith(fontSize: 11)),
-          const SizedBox(width: 4),
-          Text(
-            option.stalenessDays == 0 ? 'today' : '${option.stalenessDays}d',
-            style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.outline),
-          ),
-        ],
+    final provenance = option.isOwn
+        ? 'you paid'
+        : '${option.observationCount}×${option.verified ? ' ✓' : ''}';
+    return InkWell(
+      onTap: option.actionUrl == null ? null : () => _open(context, ref),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: best ? Brand.emerald.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accent.withValues(alpha: best ? 0.5 : 0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(option.storeDisplay,
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: best ? Brand.emerald : null)),
+            const SizedBox(width: 6),
+            Text('${option.price.toStringAsFixed(2)} ${option.currency}', style: AppTheme.moneyStyle.copyWith(fontSize: 11)),
+            const SizedBox(width: 4),
+            Text(
+              '$provenance · ${option.stalenessDays == 0 ? 'today' : '${option.stalenessDays}d'}',
+              style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.outline),
+            ),
+            if (option.actionUrl != null) ...[
+              const SizedBox(width: 3),
+              Icon(
+                option.actionType == 'maps' ? Icons.place_outlined : Icons.open_in_new,
+                size: 12,
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -98,7 +133,7 @@ class InventoryScreen extends ConsumerWidget {
                                         runSpacing: 6,
                                         children: [
                                           for (var i = 0; i < item.priceOptions.length; i++)
-                                            _PriceChip(option: item.priceOptions[i], best: i == 0),
+                                            _PriceChip(option: item.priceOptions[i], productName: item.productName, best: i == 0),
                                         ],
                                       ),
                                     ),

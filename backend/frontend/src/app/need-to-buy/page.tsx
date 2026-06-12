@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { track } from "@vercel/analytics";
 import { getAccessToken } from "@/lib/auth";
-import { listNeedToBuy } from "@/lib/api";
+import { listNeedToBuy, recordEvent } from "@/lib/api";
 import type { NeedToBuyItemOut } from "@/lib/types";
 
 function fmtDate(s?: string | null) {
@@ -12,6 +13,18 @@ function fmtDate(s?: string | null) {
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
+}
+
+// Tap-through telemetry: Vercel Analytics for funnels + our own events
+// table — the latter is the evidence base for retailer partnerships.
+function trackChipTap(store: string, product: string) {
+  try {
+    track("price_chip_tap", { store, product });
+  } catch { /* analytics must never block navigation */ }
+  const token = getAccessToken();
+  if (token) {
+    recordEvent(token, { kind: "price_chip_tap", store, product }).catch(() => {});
+  }
 }
 
 export default function NeedToBuyPage() {
@@ -127,14 +140,23 @@ export default function NeedToBuyPage() {
                     </div>
 
                     {/* Crowdsourced price chips — cheapest first; the best
-                        deal gets the emerald highlight. */}
+                        deal gets the emerald highlight. Tapping lands on a
+                        place to buy (maps directions or a curated shop link). */}
                     {(it.price_options?.length ?? 0) > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {it.price_options!.map((po, i) => (
-                          <span
+                          <a
                             key={po.store}
-                            title={`Seen ${po.staleness_days === 0 ? "today" : `${po.staleness_days}d ago`}`}
-                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
+                            href={po.action?.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => trackChipTap(po.store, it.product_name)}
+                            title={
+                              `${po.is_own ? "You paid this" : `${po.observation_count ?? 1} receipt${(po.observation_count ?? 1) === 1 ? "" : "s"}`}` +
+                              ` · seen ${po.staleness_days === 0 ? "today" : `${po.staleness_days}d ago`}` +
+                              ` · opens ${po.action?.type === "maps" ? "directions" : po.action?.type}`
+                            }
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition hover:brightness-125 ${
                               i === 0
                                 ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
                                 : "border-white/10 bg-white/5 text-slate-300"
@@ -145,9 +167,13 @@ export default function NeedToBuyPage() {
                               {po.price.toFixed(2)} {po.currency}
                             </span>
                             <span className="text-slate-500">
-                              · {po.staleness_days === 0 ? "today" : `${po.staleness_days}d`}
+                              · {po.is_own ? "you paid" : `${po.observation_count ?? 1}×`}
+                              {po.verified && " ✓"}
+                              {" · "}
+                              {po.staleness_days === 0 ? "today" : `${po.staleness_days}d`}
                             </span>
-                          </span>
+                            <span aria-hidden className="text-slate-500">↗</span>
+                          </a>
                         ))}
                       </div>
                     )}

@@ -16,6 +16,7 @@ def init_db(db: Session) -> None:
     _apply_lightweight_migrations(db)
     _ensure_fts_index(db)
     seed_global_categories_if_missing(db)
+    seed_store_links_if_missing(db)
 
 
 def _is_sqlite() -> bool:
@@ -85,6 +86,33 @@ def seed_global_categories_if_missing(db: Session) -> None:
         ).scalar_one_or_none()
         if existing is None:
             db.add(Category(user_id=None, name=name))
+    db.commit()
+
+
+# Curated chains: maps_query gives the resolver a cleaner search string
+# than the raw receipt-printed name. Platform URLs (glovo/wolt/shop) stay
+# NULL until hand-verified — never guess deep-link slugs.
+_STORE_LINK_SEED: list[dict] = [
+    {"store_normalized": "bingo", "maps_query": "Bingo supermarket"},
+    {"store_normalized": "konzum", "maps_query": "Konzum supermarket"},
+    {"store_normalized": "mercator", "maps_query": "Mercator supermarket"},
+    {"store_normalized": "best", "maps_query": "BEST market"},
+    {"store_normalized": "amko", "maps_query": "Amko Komerc market"},
+    {"store_normalized": "dm", "maps_query": "dm drogerie markt"},
+    {"store_normalized": "lidl", "maps_query": "Lidl"},
+    {"store_normalized": "spar", "maps_query": "Spar supermarket"},
+]
+
+
+def seed_store_links_if_missing(db: Session) -> None:
+    from app.db.models import StoreLink
+
+    for spec in _STORE_LINK_SEED:
+        existing = db.execute(
+            select(StoreLink).where(StoreLink.store_normalized == spec["store_normalized"])
+        ).scalar_one_or_none()
+        if existing is None:
+            db.add(StoreLink(**spec))
     db.commit()
 
 

@@ -189,6 +189,40 @@ class PriceObservation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class StoreLink(Base):
+    """
+    Curated landing destinations per normalized store. Platform URLs are
+    hand-verified before insertion — a broken Glovo deep link is worse than
+    the always-working maps fallback the resolver uses when these are NULL.
+    """
+
+    __tablename__ = "store_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    store_normalized: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    city: Mapped[str] = mapped_column(String(64), nullable=True)
+    glovo_url: Mapped[str] = mapped_column(String(512), nullable=True)
+    wolt_url: Mapped[str] = mapped_column(String(512), nullable=True)
+    shop_url: Mapped[str] = mapped_column(String(512), nullable=True)
+    maps_query: Mapped[str] = mapped_column(String(255), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class ClientEvent(Base):
+    """Lightweight product-analytics events (e.g. price-chip taps). The
+    tap-through data is the evidence base for future retailer partnerships."""
+
+    __tablename__ = "client_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(64), index=True)
+    store: Mapped[str] = mapped_column(String(255), nullable=True)
+    product: Mapped[str] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+
+
 class Budget(Base):
     """Monthly spending limit per category for a single user, in any currency."""
 

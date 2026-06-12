@@ -39,6 +39,11 @@ class PriceOption {
   final double price;
   final String currency;
   final int stalenessDays;
+  final int observationCount;
+  final bool isOwn;
+  final bool verified;
+  final String? actionType; // maps | glovo | wolt | shop
+  final String? actionUrl;
 
   const PriceOption({
     required this.store,
@@ -46,15 +51,28 @@ class PriceOption {
     required this.price,
     required this.currency,
     required this.stalenessDays,
+    this.observationCount = 1,
+    this.isOwn = false,
+    this.verified = false,
+    this.actionType,
+    this.actionUrl,
   });
 
-  factory PriceOption.fromJson(Map<String, dynamic> json) => PriceOption(
-        store: json['store'] as String,
-        storeDisplay: (json['store_display'] ?? json['store']) as String,
-        price: (json['price'] as num).toDouble(),
-        currency: json['currency'] as String,
-        stalenessDays: (json['staleness_days'] ?? 0) as int,
-      );
+  factory PriceOption.fromJson(Map<String, dynamic> json) {
+    final action = json['action'] as Map<String, dynamic>?;
+    return PriceOption(
+      store: json['store'] as String,
+      storeDisplay: (json['store_display'] ?? json['store']) as String,
+      price: (json['price'] as num).toDouble(),
+      currency: json['currency'] as String,
+      stalenessDays: (json['staleness_days'] ?? 0) as int,
+      observationCount: (json['observation_count'] ?? 1) as int,
+      isOwn: json['is_own'] == true,
+      verified: json['verified'] == true,
+      actionType: action?['type'] as String?,
+      actionUrl: action?['url'] as String?,
+    );
+  }
 }
 
 class NeedToBuyItem {

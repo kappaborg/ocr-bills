@@ -33,6 +33,30 @@ class InventoryItem {
       );
 }
 
+class PriceOption {
+  final String store;
+  final String storeDisplay;
+  final double price;
+  final String currency;
+  final int stalenessDays;
+
+  const PriceOption({
+    required this.store,
+    required this.storeDisplay,
+    required this.price,
+    required this.currency,
+    required this.stalenessDays,
+  });
+
+  factory PriceOption.fromJson(Map<String, dynamic> json) => PriceOption(
+        store: json['store'] as String,
+        storeDisplay: (json['store_display'] ?? json['store']) as String,
+        price: (json['price'] as num).toDouble(),
+        currency: json['currency'] as String,
+        stalenessDays: (json['staleness_days'] ?? 0) as int,
+      );
+}
+
 class NeedToBuyItem {
   final int productId;
   final String productName;
@@ -40,6 +64,7 @@ class NeedToBuyItem {
   final DateTime? lastPurchasedAt;
   final DateTime? nextExpectedBuyDate;
   final double score;
+  final List<PriceOption> priceOptions;
 
   const NeedToBuyItem({
     required this.productId,
@@ -48,6 +73,7 @@ class NeedToBuyItem {
     this.lastPurchasedAt,
     this.nextExpectedBuyDate,
     required this.score,
+    this.priceOptions = const [],
   });
 
   factory NeedToBuyItem.fromJson(Map<String, dynamic> json) => NeedToBuyItem(
@@ -59,5 +85,8 @@ class NeedToBuyItem {
         nextExpectedBuyDate:
             json['next_expected_buy_date'] != null ? DateTime.tryParse(json['next_expected_buy_date'] as String) : null,
         score: (json['score'] as num).toDouble(),
+        priceOptions: (json['price_options'] as List<dynamic>? ?? const [])
+            .map((e) => PriceOption.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }

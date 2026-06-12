@@ -56,6 +56,15 @@ export type InventoryItemOut = {
   next_expected_buy_date?: string | null;
 };
 
+export type PriceOptionOut = {
+  store: string;
+  store_display: string;
+  price: number;
+  currency: string;
+  observed_at: string;
+  staleness_days: number;
+};
+
 export type NeedToBuyItemOut = {
   product_id: number;
   product_name: string;
@@ -63,5 +72,6 @@ export type NeedToBuyItemOut = {
   last_purchased_at?: string | null;
   next_expected_buy_date?: string | null;
   score: number;
+  price_options?: PriceOptionOut[];
 };
 

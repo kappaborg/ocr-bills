@@ -879,6 +879,10 @@ def confirm_receipt(
     if not was_already_confirmed:
         from app.services.inventory_update import update_inventory_for_receipt
         update_inventory_for_receipt(receipt, db)
+        # Crowdsourced price feed — same first-confirm-only guard so
+        # re-confirms can't duplicate observations.
+        from app.services.price_observations import emit_observations_for_receipt
+        emit_observations_for_receipt(receipt, db)
 
     # Drop the cached user-context so the next OCR call sees this freshly
     # confirmed receipt in the user's history.

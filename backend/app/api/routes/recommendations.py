@@ -56,11 +56,23 @@ def need_to_buy(
                 "last_purchased_at": inv.last_purchased_at,
                 "next_expected_buy_date": next_expected,
                 "score": score,
+                "_normalized": product.name_normalized,
             }
         )
 
     results.sort(key=lambda r: r["score"], reverse=True)
-    return {"results": results[:200]}
+    results = results[:200]
+
+    # Attach crowdsourced price options (top stores by freshest median).
+    # Only for the visible head of the list — each lookup is a query.
+    from app.services.price_lookup import price_options_for
+    for r in results[:30]:
+        r["price_options"] = price_options_for(r.pop("_normalized"), db)
+    for r in results[30:]:
+        r.pop("_normalized", None)
+        r["price_options"] = []
+
+    return {"results": results}
 
 
 @router.get("/recurring", dependencies=[Depends(require_plan("pro"))])

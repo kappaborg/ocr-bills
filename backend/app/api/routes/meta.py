@@ -62,3 +62,28 @@ def reindex_inventory(
         update_inventory_for_receipt(receipt, db)
 
     return {"receipts_processed": len(confirmed)}
+
+
+@router.post("/reindex-prices")
+def reindex_prices(
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    Replay this user's confirmed receipts into the anonymous
+    price_observations feed. Idempotent — the emission service's 24h
+    (product, store, price) dedup window swallows repeats.
+    """
+    from app.services.price_observations import emit_observations_for_receipt
+
+    confirmed = (
+        db.query(Receipt)
+        .filter(Receipt.user_id == user.id, Receipt.processing_status == ReceiptStatus.confirmed.value)
+        .all()
+    )
+
+    created = 0
+    for receipt in confirmed:
+        created += emit_observations_for_receipt(receipt, db)
+
+    return {"receipts_processed": len(confirmed), "observations_created": created}

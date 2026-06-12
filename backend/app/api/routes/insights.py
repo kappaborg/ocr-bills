@@ -269,6 +269,75 @@ def list_insights(db: Session = Depends(get_db), user=Depends(get_current_user))
             )
         )
 
+    # Price-move check: for products this user buys regularly (≥3 buys),
+    # compare the crowdsourced median price in the last 15 days vs the
+    # prior 30 days per store; surface the largest move ≥ 8% in either
+    # direction. Drops read as buy-now nudges, rises as heads-ups.
+    try:
+        from statistics import median as _median
+
+        from app.db.models import InventoryItem as _Inv, PriceObservation, Product
+
+        regular = (
+            db.query(Product.name, Product.name_normalized)
+            .join(_Inv, _Inv.product_id == Product.id)
+            .filter(_Inv.user_id == user.id)
+            .filter(_Inv.purchase_count >= 3)
+            .limit(20)
+            .all()
+        )
+        last_15 = now - timedelta(days=15)
+        prior_45 = now - timedelta(days=45)
+        best_move = None  # (abs_pct, name, store_display, pct, recent, before, ccy)
+        for name, norm in regular:
+            rows_q = (
+                db.query(PriceObservation)
+                .filter(PriceObservation.product_normalized == norm)
+                .filter(PriceObservation.observed_at >= prior_45)
+                .all()
+            )
+            by_store: dict[tuple[str, str], list] = {}
+            for o in rows_q:
+                by_store.setdefault((o.store_normalized, o.currency), []).append(o)
+            for (_, ccy), obs in by_store.items():
+                recent = [o.price for o in obs if o.observed_at >= last_15]
+                before = [o.price for o in obs if o.observed_at < last_15]
+                if not recent or not before:
+                    continue
+                m_recent, m_before = _median(recent), _median(before)
+                if m_before <= 0:
+                    continue
+                pct = (m_recent - m_before) / m_before * 100
+                if abs(pct) >= 8 and (best_move is None or abs(pct) > best_move[0]):
+                    best_move = (abs(pct), name, obs[0].store_display, pct, m_recent, m_before, ccy)
+        if best_move is not None:
+            _, p_name, p_store, pct, m_recent, m_before, ccy = best_move
+            direction = "rose" if pct > 0 else "dropped"
+            hint = "Maybe stock up." if pct < 0 else "Worth comparing stores."
+            insights.append(
+                InsightOut(
+                    id=-7,
+                    type="info",
+                    message=(
+                        f"'{p_name}' at {p_store} {direction} {abs(pct):.0f}% recently "
+                        f"({m_before:.2f} → {m_recent:.2f} {ccy}). {hint}"
+                    ),
+                    metadata_json={
+                        "kind": "price_move",
+                        "product": p_name,
+                        "store": p_store,
+                        "pct": round(pct, 1),
+                        "from": m_before,
+                        "to": m_recent,
+                        "currency": ccy,
+                    },
+                    created_at=now,
+                )
+            )
+    except Exception:
+        # Price feed is additive — never let it break the insights page.
+        pass
+
     if not insights:
         # Baseline insight — same coalesce so undated receipts still count.
         # If the rolling 30-day window is empty but the user actually has

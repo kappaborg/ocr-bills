@@ -162,6 +162,33 @@ class InventoryItem(Base):
     product = relationship("Product", back_populates="inventory")
 
 
+class PriceObservation(Base):
+    """
+    Anonymous crowdsourced price point harvested from confirmed receipts.
+
+    Deliberately carries NO user_id — observations are anonymous by
+    construction so the cross-user price feed can never leak who shops
+    where. receipt_item_id is internal lineage for dedup/moderation only
+    and must never be exposed through the API.
+    """
+
+    __tablename__ = "price_observations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_normalized: Mapped[str] = mapped_column(String(255), index=True)
+    store_normalized: Mapped[str] = mapped_column(String(255), index=True)
+    store_display: Mapped[str] = mapped_column(String(255))
+    price: Mapped[float] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(8))
+    unit_price: Mapped[float] = mapped_column(Float, nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    region: Mapped[str] = mapped_column(String(64), nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="receipt")
+    receipt_item_id: Mapped[int] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class Budget(Base):
     """Monthly spending limit per category for a single user, in any currency."""
 

@@ -107,22 +107,50 @@ export default function NeedToBuyPage() {
                 {arr.map((it) => (
                   <div
                     key={it.product_id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3"
+                    className="rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-100">
-                        {it.product_name}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Last: {fmtDate(it.last_purchased_at)} · Expected:{" "}
-                        {fmtDate(it.next_expected_buy_date)}
-                      </p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-100">
+                          {it.product_name}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Last: {fmtDate(it.last_purchased_at)} · Expected:{" "}
+                          {fmtDate(it.next_expected_buy_date)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-mono text-emerald-300">
+                          score {it.score.toFixed(2)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs font-mono text-emerald-300">
-                        score {it.score.toFixed(2)}
-                      </p>
-                    </div>
+
+                    {/* Crowdsourced price chips — cheapest first; the best
+                        deal gets the emerald highlight. */}
+                    {(it.price_options?.length ?? 0) > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {it.price_options!.map((po, i) => (
+                          <span
+                            key={po.store}
+                            title={`Seen ${po.staleness_days === 0 ? "today" : `${po.staleness_days}d ago`}`}
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
+                              i === 0
+                                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                                : "border-white/10 bg-white/5 text-slate-300"
+                            }`}
+                          >
+                            <span className="font-medium">{po.store_display}</span>
+                            <span className="font-mono tabular-nums">
+                              {po.price.toFixed(2)} {po.currency}
+                            </span>
+                            <span className="text-slate-500">
+                              · {po.staleness_days === 0 ? "today" : `${po.staleness_days}d`}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

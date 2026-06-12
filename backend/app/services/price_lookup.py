@@ -56,8 +56,15 @@ def price_options_for(
     options: list[dict] = []
     median_floor = now - timedelta(days=_MEDIAN_WINDOW_DAYS)
     for (store_key, currency), obs in by_store.items():
-        med_all = median(o.price for o in obs)
-        clean = [o for o in obs if o.price <= med_all * 3]
+        # Outlier anchor: the median of the LOWER half of prices. A plain
+        # median fails on tiny samples — with [2.55, 24.00] the outlier
+        # drags its own threshold up (median 13.28 × 3 = 39.8) and survives.
+        # The lower-half median stays at 2.55 and rejects 24.00 cleanly,
+        # while legitimate price rises (≤3×) still pass.
+        prices = sorted(o.price for o in obs)
+        lower_half = prices[: max(1, (len(prices) + 1) // 2)]
+        anchor = median(lower_half)
+        clean = [o for o in obs if o.price <= anchor * 3]
         if not clean:
             continue
         recent = [o for o in clean if o.observed_at >= median_floor] or clean

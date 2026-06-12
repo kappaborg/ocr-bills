@@ -149,11 +149,12 @@ export default async function Landing() {
               </span>
             </div>
             <Image
-              src="/screenshots/dashboard.png"
+              src="/screenshots/dashboard.jpg"
               alt="ExTaSy dashboard showing spending totals, tax paid, and category breakdown"
-              width={1440}
-              height={900}
+              width={1792}
+              height={1120}
               priority
+              sizes="(max-width: 896px) 100vw, 896px"
               className="w-full"
             />
           </div>
@@ -186,10 +187,11 @@ export default async function Landing() {
           <div className="relative">
             <div className="absolute -inset-4 rounded-3xl bg-gradient-to-br from-emerald-500/15 to-transparent blur-xl" aria-hidden />
             <Image
-              src="/screenshots/receipt.png"
+              src="/screenshots/receipt.jpg"
               alt="Receipt review screen showing parsed line items from a Bosnian café receipt"
-              width={1440}
-              height={900}
+              width={1792}
+              height={1120}
+              sizes="(max-width: 1024px) 100vw, 560px"
               className="relative w-full rounded-2xl border border-white/10 shadow-xl"
             />
           </div>

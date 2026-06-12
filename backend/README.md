@@ -39,7 +39,8 @@ This image is built and runs on three environments:
 | Name | Example | Purpose |
 |---|---|---|
 | `DATABASE_URL` | `postgresql://...pooler.supabase.com:5432/postgres` | Postgres (Supabase free tier works) |
-| `JWT_SECRET` | random 32-byte hex | `openssl rand -hex 32` |
+| `JWT_SECRET` | random 32-byte hex | **Required in production.** `openssl rand -hex 32`. The app refuses to start with the default outside local dev — the default is visible in this public repo, so running with it lets anyone forge session tokens. |
+| `ENVIRONMENT` | `production` | Enables the JWT_SECRET startup guard (defaults to `local`) |
 | `GEMINI_API_KEY` | `AIza...` | Optional; high-accuracy OCR via Gemini 2.5 Flash |
 | `OCR_ENGINE` | `gemini` or `tesseract` | Which engine to use |
 | `FRONTEND_URL` | `https://your-app.vercel.app` | For Stripe redirects |

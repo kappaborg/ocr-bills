@@ -11,6 +11,23 @@ from app.db.init_db import init_db, ensure_upload_dir
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Refuse to serve with the repo-visible default JWT secret outside local
+    # dev — anyone reading the public GitHub repo could forge session tokens
+    # for any user. This bit us in production on 2026-06-12: the HF Space ran
+    # for weeks without JWT_SECRET set. Set it via env/HF Space secret:
+    #   openssl rand -hex 32
+    if settings.JWT_SECRET == "change-me" and settings.ENVIRONMENT != "local":
+        raise RuntimeError(
+            "JWT_SECRET is still the default 'change-me' — refusing to start "
+            "outside local dev. Set the JWT_SECRET env var (openssl rand -hex 32)."
+        )
+    if settings.JWT_SECRET == "change-me":
+        import logging
+        logging.getLogger("uvicorn.error").warning(
+            "JWT_SECRET is the insecure default — fine for local dev, "
+            "never deploy like this."
+        )
+
     ensure_upload_dir(settings.UPLOAD_DIR)
     db = SessionLocal()
     try:

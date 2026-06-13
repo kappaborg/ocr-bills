@@ -65,7 +65,10 @@ class Settings(BaseSettings):
     # Resend's HTTP API at api.resend.com. Free tier covers 100 emails/day.
     # When RESEND_API_KEY is empty, the weekly-summary endpoint is a no-op.
     RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "ExTaSy <noreply@ocr-bills.vercel.app>"
+    # Resend's shared sandbox domain — works without owning a real domain.
+    # When you buy a custom domain later, change to that
+    # (deliverability is significantly better with verified DKIM/SPF).
+    EMAIL_FROM: str = "ExTaSy <onboarding@resend.dev>"
 
     # Shared-secret guard for admin endpoints called by external cron.
     # Sent as `X-Admin-Token: <value>`. Defaults to "" which DENIES

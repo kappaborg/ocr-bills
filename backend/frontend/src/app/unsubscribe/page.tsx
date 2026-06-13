@@ -69,7 +69,7 @@ function UnsubscribeInner() {
             Yes, unsubscribe
           </button>
           <p className="text-xs text-slate-500">
-            You'll keep all your account data and can resubscribe anytime by emailing us.
+            You&apos;ll keep all your account data and can resubscribe anytime by emailing us.
           </p>
         </div>
       )}
@@ -80,7 +80,7 @@ function UnsubscribeInner() {
       )}
       {state === "done" && (
         <p className="mt-8 text-sm text-emerald-300">
-          Done. {email} won't receive the weekly summary anymore.
+          Done. {email} won&apos;t receive the weekly summary anymore.
         </p>
       )}
 

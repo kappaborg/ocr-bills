@@ -72,8 +72,8 @@ export default function BetaPage() {
 
       <p className="mt-12 text-center text-xs text-slate-600">
         Questions:{" "}
-        <a href="mailto:kayrayilmazedu203@gmail.com" className="text-slate-400 hover:underline">
-          kayrayilmazedu203@gmail.com
+        <a href="mailto:goldenkapparu@gmail.com" className="text-slate-400 hover:underline">
+          goldenkapparu@gmail.com
         </a>
       </p>
     </main>

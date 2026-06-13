@@ -86,11 +86,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       'App version: $version\n',
     );
     final subject = Uri.encodeComponent('ExTaSy beta feedback');
-    final uri = Uri.parse('mailto:kayrayilmazedu203@gmail.com?subject=$subject&body=$body');
+    final uri = Uri.parse('mailto:goldenkapparu@gmail.com?subject=$subject&body=$body');
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No mail app set up — email kayrayilmazedu203@gmail.com directly')),
+        const SnackBar(content: Text('No mail app set up — email goldenkapparu@gmail.com directly')),
       );
     }
   }

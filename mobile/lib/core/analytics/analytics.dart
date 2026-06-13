@@ -1,9 +1,19 @@
-import 'package:flutter/foundation.dart';
-import 'package:posthog_flutter/posthog_flutter.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
-/// Thin wrapper around PostHog. All calls no-op when no API key is set at
-/// build time, so dev builds, CI, and tests don't pollute the beta dataset.
-/// Pass the key with --dart-define=POSTHOG_API_KEY=phc_...
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+
+/// Minimal PostHog event client over plain HTTP. No SDK, no native bridge —
+/// so we don't inherit the posthog_flutter package's Kotlin compile issues.
+/// Trade-off: no session replay (SDK-only). We keep custom events and
+/// user identification, which is what the 10-friend beta actually needs.
+///
+/// Pass the project key at build time:
+///   --dart-define=POSTHOG_API_KEY=phc_...
+/// All calls no-op when the key is empty so dev builds and CI don't
+/// pollute the production dataset.
 class Analytics {
   static const _key = String.fromEnvironment('POSTHOG_API_KEY');
   static const _host = String.fromEnvironment(
@@ -11,53 +21,74 @@ class Analytics {
     defaultValue: 'https://eu.i.posthog.com',
   );
 
+  static String? _distinctId;
+  static Map<String, Object>? _userProps;
+
   static bool get enabled => _key.isNotEmpty;
 
-  /// Initialize PostHog. Safe to call once on app start; no-op when no key.
-  /// Called from main() before runApp.
+  /// Best-effort init. Generates an anonymous distinct_id until login
+  /// supplies a real one. Safe to call once on app start.
   static Future<void> init() async {
     if (!enabled) return;
-    try {
-      final config = PostHogConfig(_key)
-        ..host = _host
-        ..captureApplicationLifecycleEvents = true
-        ..debug = kDebugMode
-        // Session replay is the gold for beta observation — see what users
-        // actually tap. Sample 100% during the 10-friend beta; tune down later.
-        ..sessionReplay = true
-        ..sessionReplayConfig.maskAllTexts = false
-        ..sessionReplayConfig.maskAllImages = false;
-      await Posthog().setup(config);
-    } catch (e) {
-      // Never let analytics setup break the app.
-      debugPrint('Analytics init failed: $e');
-    }
+    _distinctId = 'anon-${DateTime.now().millisecondsSinceEpoch}';
+    // Fire-and-forget; never await network on app start.
+    unawaited(capture('app_open', {
+      'platform': Platform.operatingSystem,
+      'os_version': Platform.operatingSystemVersion,
+    }));
   }
 
-  /// Attach the current user to their session so events are attributable.
+  /// Attach the real user id once they log in. PostHog stitches the
+  /// pre-login anonymous session to this id via $identify.
   static Future<void> identify(int userId, {String? email}) async {
     if (!enabled) return;
-    try {
-      await Posthog().identify(
-        userId: userId.toString(),
-        userProperties: {if (email != null) 'email': email},
-      );
-    } catch (_) {}
+    final previous = _distinctId;
+    _distinctId = userId.toString();
+    _userProps = {if (email != null) 'email': email};
+    unawaited(_send({
+      'event': r'$identify',
+      'distinct_id': _distinctId,
+      'properties': {
+        r'$anon_distinct_id': previous,
+        r'$set': _userProps,
+      },
+    }));
   }
 
-  /// Drop the identifier on logout — events after this are anonymous.
+  /// On logout, generate a fresh anonymous id so subsequent events
+  /// aren't attributed to the previous user.
   static Future<void> reset() async {
     if (!enabled) return;
-    try {
-      await Posthog().reset();
-    } catch (_) {}
+    _distinctId = 'anon-${DateTime.now().millisecondsSinceEpoch}';
+    _userProps = null;
   }
 
-  /// Capture a custom event. Properties are PostHog-flattened on the wire.
+  /// Capture a single custom event. Properties are flat key→value pairs.
   static Future<void> capture(String event, [Map<String, Object>? props]) async {
     if (!enabled) return;
+    unawaited(_send({
+      'event': event,
+      'distinct_id': _distinctId ?? 'anon-unknown',
+      'properties': props ?? const {},
+    }));
+  }
+
+  static Future<void> _send(Map<String, Object?> body) async {
     try {
-      await Posthog().capture(eventName: event, properties: props);
-    } catch (_) {}
+      final payload = {
+        'api_key': _key,
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        ...body,
+      };
+      await http
+          .post(
+            Uri.parse('$_host/capture/'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 8));
+    } catch (e) {
+      if (kDebugMode) debugPrint('Analytics send failed: $e');
+    }
   }
 }

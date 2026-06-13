@@ -48,9 +48,10 @@ dependencies:
   # App version for feedback emails
   package_info_plus: ^8.0.0
 
-  # Beta analytics — events + session replay for watching how 10 users use
-  # the app. Free tier covers 1M events / 5K replays per month.
-  posthog_flutter: ^4.10.1
+  # Beta analytics — PostHog events via direct HTTP (the posthog_flutter
+  # SDK pinned an outdated Kotlin language version that broke the release
+  # build). We lose session replay (SDK-only) but keep all custom events.
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

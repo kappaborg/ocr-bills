@@ -16,9 +16,15 @@ import 'package:http/http.dart' as http;
 /// pollute the production dataset.
 class Analytics {
   static const _key = String.fromEnvironment('POSTHOG_API_KEY');
+  // Default is the US host because that's where the beta project lives.
+  // PostHog's /capture/ endpoint always returns HTTP 200 — even for an
+  // unrecognised api_key — so a wrong-region build looks like it's
+  // working in our smoke tests but no events land. Verified empirically:
+  // /decide returned 200 on us.i.posthog.com and 401 on eu.i.posthog.com
+  // for this project's key.
   static const _host = String.fromEnvironment(
     'POSTHOG_HOST',
-    defaultValue: 'https://eu.i.posthog.com',
+    defaultValue: 'https://us.i.posthog.com',
   );
 
   static String? _distinctId;

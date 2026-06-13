@@ -15,6 +15,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
 )
@@ -82,6 +83,11 @@ class Receipt(Base):
 
     # Parsed PDV/VAT amount in the receipt's currency (None when undetected).
     tax_amount: Mapped[float] = mapped_column(Float, nullable=True)
+
+    # 200x200 JPEG thumbnail (~10-20 KB) persisted in the DB. The original
+    # image lives in ephemeral UPLOAD_DIR on HF Spaces and dies on every
+    # restart — the thumbnail surviving in Postgres keeps list views visual.
+    thumbnail: Mapped[bytes] = mapped_column(LargeBinary, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

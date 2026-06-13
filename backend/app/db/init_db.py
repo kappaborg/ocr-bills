@@ -54,6 +54,9 @@ def _apply_lightweight_migrations(db: Session) -> None:
         # but SQLite also accepts "REAL". Use the SQL-92 spelling here.
         col_type = "REAL" if _is_sqlite() else "DOUBLE PRECISION"
         db.execute(text(f"ALTER TABLE receipts ADD COLUMN tax_amount {col_type}"))
+    if not _column_exists(db, "receipts", "thumbnail"):
+        blob_type = "BLOB" if _is_sqlite() else "BYTEA"
+        db.execute(text(f"ALTER TABLE receipts ADD COLUMN thumbnail {blob_type}"))
     db.commit()
 
 

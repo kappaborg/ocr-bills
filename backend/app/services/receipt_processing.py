@@ -124,6 +124,13 @@ def process_receipt(receipt_id: int) -> None:
         receipt.processing_status = ReceiptStatus.parsed.value
         receipt.processing_error = None
 
+        # Persist the thumbnail NOW while the original is still on disk —
+        # UPLOAD_DIR is ephemeral on HF Spaces, so waiting for the first
+        # list view risks the file being gone after a restart.
+        if receipt.thumbnail is None:
+            from app.services.thumbnails import make_thumbnail_bytes
+            receipt.thumbnail = make_thumbnail_bytes(file_path)
+
         # Replace parsed items.
         receipt.items.clear()
         db.flush()

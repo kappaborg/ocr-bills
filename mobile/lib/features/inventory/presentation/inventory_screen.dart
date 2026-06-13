@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/analytics/analytics.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/date_formatter.dart';
@@ -21,6 +22,8 @@ class _PriceChip extends ConsumerWidget {
     final url = option.actionUrl;
     if (url == null) return;
     // Fire-and-forget tap telemetry — never block or fail the navigation.
+    // Logged to both backend events (partnership evidence) + PostHog (UX).
+    Analytics.capture('price_chip_tap', {'store': option.store, 'product': productName});
     try {
       ref.read(apiClientProvider).post('/events', data: {
         'kind': 'price_chip_tap',

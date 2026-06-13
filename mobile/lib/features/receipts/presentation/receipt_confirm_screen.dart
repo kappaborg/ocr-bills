@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/analytics/analytics.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/utils/currency_formatter.dart';
 import '../../../shared/widgets/brand.dart';
@@ -83,6 +84,10 @@ class _ReceiptConfirmScreenState extends ConsumerState<ReceiptConfirmScreen> {
     }
     if (mounted) {
       ref.invalidate(receiptsListProvider);
+      Analytics.capture('receipt_confirmed', {
+        'item_count': _items.length,
+        if (_receipt?.currency != null) 'currency': _receipt!.currency!,
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Receipt confirmed'), duration: Duration(seconds: 2)),
       );

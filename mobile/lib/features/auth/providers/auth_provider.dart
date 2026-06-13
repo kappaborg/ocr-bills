@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/analytics/analytics.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../data/auth_repository.dart';
 import '../models/user.dart';
@@ -24,6 +25,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     try {
       final user = await _repo.getMe();
       state = AsyncValue.data(user);
+      Analytics.identify(user.id, email: user.email);
     } catch (_) {
       await SecureStorage.deleteToken();
       state = const AsyncValue.data(null);
@@ -35,6 +37,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     try {
       final user = await _repo.login(email, password);
       state = AsyncValue.data(user);
+      Analytics.identify(user.id, email: user.email);
+      Analytics.capture('login');
     } catch (e, st) {
       state = const AsyncValue.data(null);
       Error.throwWithStackTrace(e, st);
@@ -46,6 +50,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     try {
       final user = await _repo.register(email, password);
       state = AsyncValue.data(user);
+      Analytics.identify(user.id, email: user.email);
+      Analytics.capture('register');
     } catch (e, st) {
       state = const AsyncValue.data(null);
       Error.throwWithStackTrace(e, st);
@@ -54,6 +60,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   Future<void> logout() async {
     await _repo.logout();
+    Analytics.reset();
     state = const AsyncValue.data(null);
   }
 

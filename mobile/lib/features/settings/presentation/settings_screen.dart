@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/preferences/display_currency_provider.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../auth/data/auth_repository.dart';
@@ -64,6 +67,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _logout() async {
     await ref.read(authProvider.notifier).logout();
+  }
+
+  /// Open the system mail composer with a prefilled subject + device info.
+  /// Lower-friction than a separate form — beta users reply to the email
+  /// they already would. Falls back gracefully if no mail client is set up.
+  Future<void> _sendFeedback() async {
+    final user = ref.read(authProvider).valueOrNull;
+    String version = '';
+    try {
+      final info = await PackageInfo.fromPlatform();
+      version = '${info.version} (build ${info.buildNumber})';
+    } catch (_) {}
+    final body = Uri.encodeComponent(
+      '\n\n— — —\nPlease leave the lines below so we can debug.\n'
+      'User: ${user?.email ?? "anonymous"}\n'
+      'Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}\n'
+      'App version: $version\n',
+    );
+    final subject = Uri.encodeComponent('ExTaSy beta feedback');
+    final uri = Uri.parse('mailto:kayrayilmazedu203@gmail.com?subject=$subject&body=$body');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No mail app set up — email kayrayilmazedu203@gmail.com directly')),
+      );
+    }
   }
 
   Future<void> _seedSamples() async {
@@ -168,6 +197,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Plans & Pricing'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/pricing'),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.feedback_outlined, color: Brand.cyan),
+            title: const Text('Send feedback'),
+            subtitle: const Text('Beta — your notes shape the next build'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _loading ? null : _sendFeedback,
           ),
           const Divider(),
           ListTile(

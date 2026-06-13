@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../../core/analytics/analytics.dart';
 import '../../../features/receipts/data/receipts_repository.dart';
 import '../../../features/receipts/providers/receipts_provider.dart';
 import '../../../shared/widgets/quota_dialog.dart';
@@ -132,6 +133,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> with WidgetsBindi
     try {
       final repo = ref.read(receiptsRepositoryProvider);
       final receiptId = await repo.uploadFromFrame(file);
+      Analytics.capture('receipt_uploaded', const {'source': 'camera'});
       if (mounted) {
         ref.invalidate(receiptsListProvider);
         context.push('/receipt/$receiptId');
@@ -169,6 +171,7 @@ class _ScannerScreenState extends ConsumerState<ScannerScreen> with WidgetsBindi
     try {
       final repo = ref.read(receiptsRepositoryProvider);
       final ids = await repo.uploadFiles(files.map((f) => File(f.path)).toList());
+      Analytics.capture('receipt_uploaded', {'source': 'batch', 'count': ids.length});
       if (!mounted) return;
       ref.invalidate(receiptsListProvider);
       ScaffoldMessenger.of(context).showSnackBar(

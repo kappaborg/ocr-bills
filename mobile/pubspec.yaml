@@ -45,6 +45,13 @@ dependencies:
   # External links (price-chip tap-through to maps / shop pages)
   url_launcher: ^6.3.0
 
+  # App version for feedback emails
+  package_info_plus: ^8.0.0
+
+  # Beta analytics — events + session replay for watching how 10 users use
+  # the app. Free tier covers 1M events / 5K replays per month.
+  posthog_flutter: ^4.10.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

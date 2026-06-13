@@ -69,9 +69,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await ref.read(authProvider.notifier).logout();
   }
 
-  /// Open the system mail composer with a prefilled subject + device info.
-  /// Lower-friction than a separate form — beta users reply to the email
-  /// they already would. Falls back gracefully if no mail client is set up.
+  /// Opens the system mail composer with a prefilled subject + device info.
+  /// Falls back to the share sheet (which always works) when no mail app
+  /// is set up — caught in beta: launchUrl(mailto:) throws
+  /// ActivityNotFoundException on devices without a default mail handler
+  /// instead of returning false, so without the try/catch the tap
+  /// silently dropped on those phones.
   Future<void> _sendFeedback() async {
     final user = ref.read(authProvider).valueOrNull;
     String version = '';
@@ -79,18 +82,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final info = await PackageInfo.fromPlatform();
       version = '${info.version} (build ${info.buildNumber})';
     } catch (_) {}
-    final body = Uri.encodeComponent(
-      '\n\n— — —\nPlease leave the lines below so we can debug.\n'
-      'User: ${user?.email ?? "anonymous"}\n'
-      'Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}\n'
-      'App version: $version\n',
+
+    const subject = 'ExTaSy beta feedback';
+    final bodyPlain =
+        '\n\n— — —\nPlease leave the lines below so we can debug.\n'
+        'User: ${user?.email ?? "anonymous"}\n'
+        'Platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}\n'
+        'App version: $version\n';
+
+    final uri = Uri.parse(
+      'mailto:goldenkapparu@gmail.com'
+      '?subject=${Uri.encodeComponent(subject)}'
+      '&body=${Uri.encodeComponent(bodyPlain)}',
     );
-    final subject = Uri.encodeComponent('ExTaSy beta feedback');
-    final uri = Uri.parse('mailto:goldenkapparu@gmail.com?subject=$subject&body=$body');
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && mounted) {
+
+    bool launched = false;
+    try {
+      launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // Most common on Android: ActivityNotFoundException when no mail
+      // handler is installed. Treat the same as a false return.
+      launched = false;
+    }
+    if (launched) return;
+
+    // Fallback: share sheet always has SOMETHING to share to (Notes,
+    // Messages, Telegram, WhatsApp…). The user can paste into Gmail web
+    // afterwards. This is the universal escape hatch.
+    if (!mounted) return;
+    try {
+      await Share.share(
+        'To: goldenkapparu@gmail.com\nSubject: $subject\n$bodyPlain',
+        subject: subject,
+      );
+    } catch (_) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No mail app set up — email goldenkapparu@gmail.com directly')),
+        const SnackBar(content: Text('Email goldenkapparu@gmail.com directly')),
       );
     }
   }

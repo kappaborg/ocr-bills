@@ -7,6 +7,7 @@ import '../../../shared/widgets/brand.dart';
 import '../../../shared/widgets/loading_skeleton.dart';
 import '../../../shared/widgets/receipt_card.dart';
 import '../../billing/data/billing_repository.dart';
+import '../../receipts/data/receipts_repository.dart';
 import '../../receipts/providers/receipts_provider.dart';
 import '../providers/dashboard_provider.dart';
 import 'widgets/spending_chart.dart';
@@ -47,7 +48,16 @@ class DashboardScreen extends ConsumerWidget {
           ref.invalidate(billingMeProvider);
           await ref.read(receiptsListProvider.notifier).load();
         },
-        child: SingleChildScrollView(
+        // Empty-state short-circuit: a fresh account on the brand-new
+        // dashboard sees "0.00 KM · 0 receipts" and a wall of empty
+        // widgets, which reads as "this app does nothing." The hero CTA
+        // gives them an unambiguous next step. Only fires when we KNOW
+        // the receipts list is empty — during loading we render the
+        // normal layout with skeletons so we don't flash the hero in.
+        child: receiptsAsync.maybeWhen(
+          data: (rs) => rs.isEmpty ? _EmptyDashboardHero() : null,
+          orElse: () => null,
+        ) ?? SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -212,6 +222,116 @@ class DashboardScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shown when the user's confirmed-receipts list is empty. One unambiguous
+/// next step (scan now), a quieter secondary path (load samples to explore).
+class _EmptyDashboardHero extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_EmptyDashboardHero> createState() => _EmptyDashboardHeroState();
+}
+
+class _EmptyDashboardHeroState extends ConsumerState<_EmptyDashboardHero> {
+  bool _seeding = false;
+
+  Future<void> _addSamples() async {
+    setState(() => _seeding = true);
+    try {
+      await ref.read(receiptsRepositoryProvider).seedSampleReceipts();
+      await ref.read(receiptsListProvider.notifier).load();
+      ref.invalidate(insightsProvider);
+      ref.invalidate(spendingByCategoryProvider);
+      ref.invalidate(billingMeProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _seeding = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 12),
+          const SectionLabel('Welcome'),
+          const SizedBox(height: 6),
+          Text(
+            'Let\'s see your\nspending pulse',
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              height: 1.1,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Scan a receipt — anything from your wallet works. ExTaSy reads it, '
+            'sorts the items, and starts building your dashboard.',
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline, height: 1.45),
+          ),
+          const SizedBox(height: 36),
+
+          // Primary CTA — gradient, brand-aligned, unambiguous.
+          GradientButton(
+            onPressed: () => context.go('/home/scan'),
+            icon: const Icon(Icons.camera_alt_outlined, size: 18),
+            child: const Text('Scan your first receipt'),
+          ),
+          const SizedBox(height: 12),
+
+          // Secondary path: load the sample-receipt set so they can
+          // poke around the app with realistic data. Quieter visually.
+          OutlinedButton.icon(
+            onPressed: _seeding ? null : _addSamples,
+            icon: _seeding
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.auto_awesome_outlined, size: 18),
+            label: const Text('Or explore with 7 sample receipts'),
+          ),
+
+          const SizedBox(height: 40),
+
+          // What the user gets — three short value bullets. Same icons as
+          // onboarding so the message rhymes across screens.
+          const _Bullet(icon: Icons.translate_outlined, text: 'Bosnian, English, Arabic, anything — the OCR handles it'),
+          const _Bullet(icon: Icons.bolt_outlined, text: 'Live preview before the full scan finishes'),
+          const _Bullet(icon: Icons.attach_money_outlined, text: 'Once you have a few, see the cheapest store per item'),
+        ],
+      ),
+    );
+  }
+}
+
+class _Bullet extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _Bullet({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(text, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+          ),
+        ],
       ),
     );
   }

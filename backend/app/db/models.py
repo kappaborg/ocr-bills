@@ -39,6 +39,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    # Per-user opt-out for the weekly summary email. The unsubscribe URL
+    # in each email flips this to True. Defaults to False (opted-in).
+    weekly_summary_unsubscribed: Mapped[bool] = mapped_column(Boolean, default=False)
+    weekly_summary_last_sent_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     receipts = relationship("Receipt", back_populates="user")
     categories = relationship("Category", back_populates="user")

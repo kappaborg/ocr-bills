@@ -57,6 +57,11 @@ def _apply_lightweight_migrations(db: Session) -> None:
     if not _column_exists(db, "receipts", "thumbnail"):
         blob_type = "BLOB" if _is_sqlite() else "BYTEA"
         db.execute(text(f"ALTER TABLE receipts ADD COLUMN thumbnail {blob_type}"))
+    if not _column_exists(db, "users", "weekly_summary_unsubscribed"):
+        bool_default = "0" if _is_sqlite() else "false"
+        db.execute(text(f"ALTER TABLE users ADD COLUMN weekly_summary_unsubscribed BOOLEAN DEFAULT {bool_default}"))
+    if not _column_exists(db, "users", "weekly_summary_last_sent_at"):
+        db.execute(text("ALTER TABLE users ADD COLUMN weekly_summary_last_sent_at TIMESTAMP"))
     db.commit()
 
 

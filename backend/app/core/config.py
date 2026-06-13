@@ -61,6 +61,17 @@ class Settings(BaseSettings):
     # Frontend URL for Stripe Checkout redirects
     FRONTEND_URL: str = "http://localhost:3737"
 
+    # ── Email (Resend) ─────────────────────────────────────────────────────
+    # Resend's HTTP API at api.resend.com. Free tier covers 100 emails/day.
+    # When RESEND_API_KEY is empty, the weekly-summary endpoint is a no-op.
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "ExTaSy <noreply@ocr-bills.vercel.app>"
+
+    # Shared-secret guard for admin endpoints called by external cron.
+    # Sent as `X-Admin-Token: <value>`. Defaults to "" which DENIES
+    # everything — production must set ADMIN_TOKEN to a random hex string.
+    ADMIN_TOKEN: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"

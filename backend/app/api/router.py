@@ -33,4 +33,5 @@ router.include_router(reconcile.router, prefix="/reconcile", tags=["reconcile"])
 router.include_router(billing.router, prefix="/billing", tags=["billing"])
 router.include_router(events.router, prefix="/events", tags=["events"])
 router.include_router(shopping_list.router, prefix="/shopping-list", tags=["shopping-list"])
+router.include_router(admin.router, prefix="/admin", tags=["admin"])
 

@@ -1,0 +1,20 @@
+name: weekly-summary
+on:
+  schedule:
+    # Monday 06:00 UTC = 08:00 Sarajevo (CET) / 07:00 in summer. Cron in
+    # UTC; either way users see it Monday morning local.
+    - cron: '0 6 * * 1'
+  workflow_dispatch: {}  # let me trigger manually for testing
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /admin/send-weekly-summaries
+        env:
+          API_BASE: https://kappasutra-extasy-backend.hf.space
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          curl -fsS -X POST "$API_BASE/admin/send-weekly-summaries" \
+            -H "X-Admin-Token: $ADMIN_TOKEN" \
+            -H "Content-Type: application/json"

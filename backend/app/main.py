@@ -39,6 +39,44 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.APP_NAME, version="v1", lifespan=lifespan)
 
+
+class _RealClientIPMiddleware:
+    """
+    Override scope["client"] with the rightmost X-Forwarded-For value (the
+    one HF's proxy actually wrote), instead of trusting the leftmost — which
+    is whatever the attacker chose to put in the header.
+
+    HF Spaces' reverse proxy APPENDS to X-Forwarded-For rather than
+    replacing it. With uvicorn's --proxy-headers, the leftmost value wins —
+    so a client sending "X-Forwarded-For: 1.2.3.4" makes the rate limiter
+    see 1.2.3.4. Rotating the spoofed IP bypasses per-IP rate limits
+    entirely (verified empirically on 2026-06-13: 12 rotating-XFF
+    /auth/login attempts received zero 429s).
+
+    Pure ASGI middleware so it runs before any route or limiter touches
+    request.client. Tolerates a header with N comma-separated values and
+    always picks the last one — that's the IP the trusted edge proxy saw,
+    independent of anything the client added.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            headers = scope.get("headers", [])
+            for name, value in headers:
+                if name == b"x-forwarded-for":
+                    parts = [p.strip() for p in value.decode("latin-1").split(",") if p.strip()]
+                    if parts:
+                        client = scope.get("client") or ("", 0)
+                        scope = {**scope, "client": (parts[-1], client[1])}
+                    break
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(_RealClientIPMiddleware)
+
 _cors_origins = [
     o.strip()
     for o in getattr(settings, "FRONTEND_ORIGINS", "").split(",")

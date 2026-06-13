@@ -65,8 +65,18 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
 @router.post("/login")
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
+    # Two-key rate limit. Each key has its own bucket; either one tripping
+    # is enough to reject. Email-keying is the real defense: brute-forcing
+    # a specific account targets one specific email, so rotating IPs
+    # doesn't help the attacker. IP-keying remains as defense-in-depth
+    # against scattershot credential-stuffing (now that the real IP comes
+    # from _RealClientIPMiddleware, not the spoofable XFF leftmost).
+    email_key = (payload.email or "").lower().strip() or "blank"
     ip = request.client.host if request.client else "unknown"
-    if not live_ocr_limiter.allow(f"login:{ip}", capacity=10, refill_per_sec=10 / 60.0):
+    if (
+        not live_ocr_limiter.allow(f"login:email:{email_key}", capacity=10, refill_per_sec=10 / 60.0)
+        or not live_ocr_limiter.allow(f"login:ip:{ip}", capacity=20, refill_per_sec=20 / 60.0)
+    ):
         raise HTTPException(status_code=429, detail="Too many login attempts. Please wait 60 seconds before trying again.")
 
     user = db.query(User).filter(User.email == payload.email.lower().strip()).first()
